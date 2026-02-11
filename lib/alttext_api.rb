@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 require "net/http"
 require "uri"
 require "json"
@@ -18,6 +20,13 @@ class AltTextApi
   def initialize(api_key:, base_url: nil)
     @api_key = api_key
     @base_url = (base_url || "https://alttext.ai/api/v1").chomp("/")
+    @uri = URI(@base_url)
+    @http = Net::HTTP.new(@uri.host, @uri.port)
+    @http.use_ssl = @uri.scheme == "https"
+    @http.open_timeout = 10
+    @http.read_timeout = 120
+    @http.write_timeout = 30
+    @http.keep_alive_timeout = 30
   end
 
   def get_account
@@ -122,14 +131,15 @@ class AltTextApi
       uri.query = URI.encode_www_form(query.compact)
     end
 
-    http = Net::HTTP.new(uri.host, uri.port)
-    http.use_ssl = uri.scheme == "https"
-    http.open_timeout = 10
-    http.read_timeout = 120
-
     req = build_request(method, uri, body)
-    response = http.request(req)
+    ensure_connected
+    response = @http.request(req)
 
+    handle_response(response)
+  rescue Errno::EPIPE, IOError, Errno::ECONNRESET
+    @http.finish rescue nil
+    @http.start
+    response = @http.request(req)
     handle_response(response)
   rescue Errno::ECONNREFUSED, Net::OpenTimeout, Net::ReadTimeout, SocketError => e
     raise AltTextApiError.new(
@@ -141,12 +151,17 @@ class AltTextApi
     )
   end
 
+  def ensure_connected
+    @http.start unless @http.started?
+  end
+
   def build_request(method, uri, body)
     klass = case method
             when :get    then Net::HTTP::Get
             when :post   then Net::HTTP::Post
             when :patch  then Net::HTTP::Patch
             when :delete then Net::HTTP::Delete
+            else raise ArgumentError, "unsupported HTTP method: #{method}"
             end
 
     req = klass.new(uri)

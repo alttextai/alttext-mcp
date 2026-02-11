@@ -1,9 +1,69 @@
 #!/usr/bin/env ruby
+# frozen_string_literal: true
 
 require "bundler/setup"
 require "json"
 require "mcp"
+require "time"
 require_relative "../lib/alttext_api"
+
+module Formatters
+  module_function
+
+  def format_image(image)
+    lines = []
+    lines << "Asset ID: #{image["asset_id"]}"
+    lines << "Alt text: #{image["alt_text"] || "(none)"}"
+    lines << "URL: #{image["url"]}" if image["url"]
+
+    alt_texts = image["alt_texts"] || {}
+    if alt_texts.any?
+      lines << "Languages:"
+      alt_texts.each { |lang, text| lines << "  #{lang}: #{text}" }
+    end
+
+    lines << "Tags: #{image["tags"].join(", ")}" if image["tags"]&.any?
+    lines << "Metadata: #{JSON.generate(image["metadata"])}" if image["metadata"]&.any?
+
+    if image["created_at"].is_a?(Numeric)
+      lines << "Created: #{Time.at(image["created_at"]).utc.iso8601}"
+    end
+
+    errors = image["errors"] || {}
+    if errors.any?
+      lines << "Errors: #{errors.values.flatten.join(", ")}"
+    end
+
+    lines.join("\n")
+  end
+
+  def format_image_list(result)
+    pagination = result[:pagination]
+    images = result[:images]
+
+    lines = ["Found #{pagination[:total_count]} images (page #{pagination[:current_page]} of #{pagination[:total_pages]})", ""]
+
+    if images.empty?
+      lines << "No images found."
+    else
+      images.each do |image|
+        lines << "- #{image["asset_id"]}: #{image["alt_text"] || "(no alt text)"}"
+      end
+    end
+
+    lines.join("\n")
+  end
+
+  def error_response(error)
+    if error.is_a?(AltTextApiError)
+      parts = ["Error (#{error.status}): #{error.message}"]
+      parts << "Code: #{error.error_code}" if error.error_code
+      MCP::Tool::Response.new([{ type: "text", text: parts.join("\n") }], error: true)
+    else
+      MCP::Tool::Response.new([{ type: "text", text: "Error: #{error.message}" }], error: true)
+    end
+  end
+end
 
 api_key = ENV["ALTTEXT_API_KEY"]
 unless api_key
@@ -12,60 +72,6 @@ unless api_key
 end
 
 api = AltTextApi.new(api_key: api_key, base_url: ENV["ALTTEXT_API_BASE_URL"])
-
-def format_image(image)
-  lines = []
-  lines << "Asset ID: #{image["asset_id"]}"
-  lines << "Alt text: #{image["alt_text"] || "(none)"}"
-  lines << "URL: #{image["url"]}" if image["url"]
-
-  alt_texts = image["alt_texts"] || {}
-  if alt_texts.any?
-    lines << "Languages:"
-    alt_texts.each { |lang, text| lines << "  #{lang}: #{text}" }
-  end
-
-  lines << "Tags: #{image["tags"].join(", ")}" if image["tags"]&.any?
-  lines << "Metadata: #{JSON.generate(image["metadata"])}" if image["metadata"]&.any?
-
-  if image["created_at"].is_a?(Numeric)
-    lines << "Created: #{Time.at(image["created_at"]).utc.iso8601}"
-  end
-
-  errors = image["errors"] || {}
-  if errors.any?
-    lines << "Errors: #{errors.values.flatten.join(", ")}"
-  end
-
-  lines.join("\n")
-end
-
-def format_image_list(result)
-  pagination = result[:pagination]
-  images = result[:images]
-
-  lines = ["Found #{pagination[:total_count]} images (page #{pagination[:current_page]} of #{pagination[:total_pages]})", ""]
-
-  if images.empty?
-    lines << "No images found."
-  else
-    images.each do |image|
-      lines << "- #{image["asset_id"]}: #{image["alt_text"] || "(no alt text)"}"
-    end
-  end
-
-  lines.join("\n")
-end
-
-def format_error(error)
-  if error.is_a?(AltTextApiError)
-    parts = ["Error (#{error.status}): #{error.message}"]
-    parts << "Code: #{error.error_code}" if error.error_code
-    MCP::Tool::Response.new([{ type: "text", text: parts.join("\n") }], error: true)
-  else
-    MCP::Tool::Response.new([{ type: "text", text: "Error: #{error.message}" }], error: true)
-  end
-end
 
 server = MCP::Server.new(name: "alttext-ai", version: "1.0.0")
 
@@ -89,9 +95,9 @@ server.define_tool(
   },
 ) do |args, server_context:|
   image = api.create_image(**args)
-  MCP::Tool::Response.new([{ type: "text", text: "Generated alt text for #{args[:url]}:\n\n#{format_image(image)}" }])
-rescue AltTextApiError, StandardError => e
-  format_error(e)
+  MCP::Tool::Response.new([{ type: "text", text: "Generated alt text for #{args[:url]}:\n\n#{Formatters.format_image(image)}" }])
+rescue AltTextApiError => e
+  Formatters.error_response(e)
 end
 
 server.define_tool(
@@ -106,9 +112,9 @@ server.define_tool(
   },
 ) do |args, server_context:|
   result = api.list_images(**args)
-  MCP::Tool::Response.new([{ type: "text", text: format_image_list(result) }])
-rescue AltTextApiError, StandardError => e
-  format_error(e)
+  MCP::Tool::Response.new([{ type: "text", text: Formatters.format_image_list(result) }])
+rescue AltTextApiError => e
+  Formatters.error_response(e)
 end
 
 server.define_tool(
@@ -124,9 +130,9 @@ server.define_tool(
   },
 ) do |args, server_context:|
   result = api.search_images(**args)
-  MCP::Tool::Response.new([{ type: "text", text: "Search results for \"#{args[:query]}\":\n\n#{format_image_list(result)}" }])
-rescue AltTextApiError, StandardError => e
-  format_error(e)
+  MCP::Tool::Response.new([{ type: "text", text: "Search results for \"#{args[:query]}\":\n\n#{Formatters.format_image_list(result)}" }])
+rescue AltTextApiError => e
+  Formatters.error_response(e)
 end
 
 server.define_tool(
@@ -141,9 +147,9 @@ server.define_tool(
   },
 ) do |args, server_context:|
   image = api.get_image(**args)
-  MCP::Tool::Response.new([{ type: "text", text: format_image(image) }])
-rescue AltTextApiError, StandardError => e
-  format_error(e)
+  MCP::Tool::Response.new([{ type: "text", text: Formatters.format_image(image) }])
+rescue AltTextApiError => e
+  Formatters.error_response(e)
 end
 
 server.define_tool(
@@ -162,9 +168,9 @@ server.define_tool(
   },
 ) do |args, server_context:|
   image = api.update_image(**args)
-  MCP::Tool::Response.new([{ type: "text", text: "Updated image #{args[:asset_id]}:\n\n#{format_image(image)}" }])
-rescue AltTextApiError, StandardError => e
-  format_error(e)
+  MCP::Tool::Response.new([{ type: "text", text: "Updated image #{args[:asset_id]}:\n\n#{Formatters.format_image(image)}" }])
+rescue AltTextApiError => e
+  Formatters.error_response(e)
 end
 
 server.define_tool(
@@ -179,8 +185,8 @@ server.define_tool(
 ) do |args, server_context:|
   api.delete_image(asset_id: args[:asset_id])
   MCP::Tool::Response.new([{ type: "text", text: "Deleted image #{args[:asset_id]}" }])
-rescue AltTextApiError, StandardError => e
-  format_error(e)
+rescue AltTextApiError => e
+  Formatters.error_response(e)
 end
 
 server.define_tool(
@@ -205,8 +211,8 @@ server.define_tool(
   lines << "Ending period: true" if account["ending_period"]
 
   MCP::Tool::Response.new([{ type: "text", text: lines.join("\n") }])
-rescue AltTextApiError, StandardError => e
-  format_error(e)
+rescue AltTextApiError => e
+  Formatters.error_response(e)
 end
 
 server.define_tool(
@@ -255,8 +261,8 @@ server.define_tool(
   end
 
   MCP::Tool::Response.new([{ type: "text", text: lines.join("\n") }])
-rescue AltTextApiError, StandardError => e
-  format_error(e)
+rescue AltTextApiError => e
+  Formatters.error_response(e)
 end
 
 transport = MCP::Server::Transports::StdioTransport.new(server)
