@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "json"
 require "time"
 require_relative "alttext_api"
 
@@ -46,6 +45,55 @@ module Formatters
       images.each do |image|
         lines << "- #{image["asset_id"]}: #{image["alt_text"] || "(no alt text)"}"
       end
+    end
+
+    lines.join("\n")
+  end
+
+  def format_account(account)
+    credits_remaining = (account["usage_limit"] || 0) - (account["usage"] || 0)
+
+    lines = [
+      "Account: #{account["name"]}",
+      "Credits: #{credits_remaining} remaining (#{account["usage"]} used of #{account["usage_limit"]})",
+      "Default language: #{account["default_lang"]}",
+    ]
+    lines << "Custom prompt: #{account["gpt_prompt"]}" if account["gpt_prompt"]
+    lines << "Max chars: #{account["max_chars"]}" if account["max_chars"]
+    lines << "Webhook: #{account["webhook_url"]}" if account["webhook_url"]
+    lines << "Notification email: #{account["notification_email"]}" if account["notification_email"]
+    lines << "Whitelabel: #{account["whitelabel"]}"
+    lines << "No quotes: #{account["no_quotes"]}"
+    lines << "Ending period: true" if account["ending_period"]
+
+    lines.join("\n")
+  end
+
+  def format_scrape_result(result, url)
+    scraped = result["scraped_images"] || []
+
+    lines = [
+      "Scraped #{url}",
+      "Images found: #{scraped.length}",
+      "Images queued for processing: #{result["total_processed"] || 0}",
+      "",
+    ]
+
+    if scraped.any?
+      lines << "Discovered images:"
+      scraped.each do |img|
+        status = img["skip_reason"] ? "skipped: #{img["skip_reason"]}" : "queued"
+        lines << "  - #{img["src"] || "(no src)"} [#{status}]"
+      end
+    end
+
+    errors = result["errors"] || {}
+    if errors.any?
+      lines << "\nErrors: #{errors.values.flatten.join(", ")}"
+    end
+
+    if (result["total_processed"] || 0).positive?
+      lines << "\nNote: Images are being processed asynchronously. Use list_images or get_image to check results."
     end
 
     lines.join("\n")

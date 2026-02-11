@@ -100,6 +100,22 @@ This server wraps the AltText.ai REST API using the MCP stdio transport. Each to
 - `generate_alt_text` runs synchronously and returns the generated text immediately
 - `scrape_page` queues images for background processing -- use `list_images` or `get_image` afterward to check results
 
+## Development
+
+Install dependencies:
+
+```sh
+bundle install
+```
+
+Run the test suite:
+
+```sh
+bundle exec rspec
+```
+
+Tests use [WebMock](https://github.com/bblimke/webmock) to stub all HTTP requests -- no API key or network access needed.
+
 ## License
 
 MIT

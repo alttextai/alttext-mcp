@@ -121,6 +121,135 @@ RSpec.describe Formatters do
     end
   end
 
+  describe ".format_account" do
+    subject { described_class.format_account(account) }
+
+    context "with a complete account" do
+      let(:account) do
+        {
+          "name" => "Test Account",
+          "usage" => 42,
+          "usage_limit" => 1000,
+          "default_lang" => "en",
+          "gpt_prompt" => "Describe this image",
+          "max_chars" => 125,
+          "webhook_url" => "https://example.com/hook",
+          "notification_email" => "test@example.com",
+          "whitelabel" => false,
+          "no_quotes" => true,
+          "ending_period" => true,
+        }
+      end
+
+      it "shows credits remaining" do
+        expect(subject).to include("Credits: 958 remaining (42 used of 1000)")
+      end
+
+      it "includes account name" do
+        expect(subject).to include("Account: Test Account")
+      end
+
+      it "includes default language" do
+        expect(subject).to include("Default language: en")
+      end
+
+      it "includes optional fields when present" do
+        expect(subject).to include("Custom prompt: Describe this image")
+        expect(subject).to include("Max chars: 125")
+        expect(subject).to include("Webhook: https://example.com/hook")
+        expect(subject).to include("Notification email: test@example.com")
+        expect(subject).to include("Ending period: true")
+      end
+    end
+
+    context "with minimal account" do
+      let(:account) do
+        {
+          "name" => "Basic",
+          "usage" => 0,
+          "usage_limit" => 100,
+          "default_lang" => "en",
+          "whitelabel" => false,
+          "no_quotes" => false,
+        }
+      end
+
+      it "omits optional fields when absent" do
+        expect(subject).not_to include("Custom prompt:")
+        expect(subject).not_to include("Max chars:")
+        expect(subject).not_to include("Webhook:")
+        expect(subject).not_to include("Notification email:")
+        expect(subject).not_to include("Ending period:")
+      end
+    end
+  end
+
+  describe ".format_scrape_result" do
+    subject { described_class.format_scrape_result(result, "https://example.com/page") }
+
+    context "with queued images" do
+      let(:result) do
+        {
+          "scraped_images" => [
+            { "src" => "img1.jpg" },
+            { "src" => "img2.jpg", "skip_reason" => "already processed" },
+          ],
+          "total_processed" => 1,
+        }
+      end
+
+      it "shows URL and counts" do
+        expect(subject).to include("Scraped https://example.com/page")
+        expect(subject).to include("Images found: 2")
+        expect(subject).to include("Images queued for processing: 1")
+      end
+
+      it "lists queued images" do
+        expect(subject).to include("- img1.jpg [queued]")
+      end
+
+      it "lists skipped images with reason" do
+        expect(subject).to include("- img2.jpg [skipped: already processed]")
+      end
+
+      it "includes async processing note" do
+        expect(subject).to include("Images are being processed asynchronously")
+      end
+    end
+
+    context "with no images" do
+      let(:result) do
+        {
+          "scraped_images" => [],
+          "total_processed" => 0,
+        }
+      end
+
+      it "shows zero counts" do
+        expect(subject).to include("Images found: 0")
+        expect(subject).to include("Images queued for processing: 0")
+      end
+
+      it "omits async note when nothing was processed" do
+        expect(subject).not_to include("asynchronously")
+      end
+    end
+
+    context "with errors" do
+      let(:result) do
+        {
+          "scraped_images" => [],
+          "total_processed" => 0,
+          "errors" => { "url" => ["is unreachable"] },
+        }
+      end
+
+      it "includes error messages" do
+        expect(subject).to include("Errors: is unreachable")
+      end
+    end
+  end
+
   describe ".error_response" do
     context "with AltTextApiError" do
       let(:error) do
@@ -128,7 +257,7 @@ RSpec.describe Formatters do
           status: 422,
           error_code: "validation_error",
           errors: { "url" => ["is invalid"] },
-          raw_body: {},
+  
           message: "Validation failed",
         )
       end
@@ -157,7 +286,7 @@ RSpec.describe Formatters do
           status: 500,
           error_code: nil,
           errors: {},
-          raw_body: {},
+  
           message: "Internal server error",
         )
       end

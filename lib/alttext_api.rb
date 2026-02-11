@@ -5,13 +5,12 @@ require "uri"
 require "json"
 
 class AltTextApiError < StandardError
-  attr_reader :status, :error_code, :errors, :raw_body
+  attr_reader :status, :error_code, :errors
 
-  def initialize(status:, error_code:, errors:, raw_body:, message:)
+  def initialize(status:, error_code:, errors:, message:)
     @status = status
     @error_code = error_code
     @errors = errors
-    @raw_body = raw_body
     super(message)
   end
 end
@@ -132,23 +131,19 @@ class AltTextApi
     end
 
     req = build_request(method, uri, body)
-    ensure_connected
-    response = @http.request(req)
-
-    handle_response(response)
-  rescue Errno::EPIPE, IOError, Errno::ECONNRESET
-    @http.finish rescue nil
-    @http.start
-    response = @http.request(req)
-    handle_response(response)
-  rescue Errno::ECONNREFUSED, Net::OpenTimeout, Net::ReadTimeout, SocketError => e
-    raise AltTextApiError.new(
-      status: 0,
-      error_code: "connection_error",
-      errors: {},
-      raw_body: {},
-      message: "Could not connect to AltText.ai API: #{e.message}",
-    )
+    retried = false
+    begin
+      ensure_connected
+      response = @http.request(req)
+      handle_response(response)
+    rescue Errno::EPIPE, IOError, Errno::ECONNRESET => e
+      @http.finish rescue nil
+      raise connection_error(e) if retried
+      retried = true
+      retry
+    rescue Errno::ECONNREFUSED, Net::OpenTimeout, Net::ReadTimeout, Net::WriteTimeout, SocketError => e
+      raise connection_error(e)
+    end
   end
 
   def ensure_connected
@@ -185,7 +180,8 @@ class AltTextApi
 
     unless response.is_a?(Net::HTTPSuccess)
       error_code = body["error_code"]
-      errors = body["errors"] || {}
+      errors = body["errors"]
+      errors = {} unless errors.is_a?(Hash)
       message = body["error"] ||
                 errors.values.flatten.join(", ").then { |s| s.empty? ? nil : s } ||
                 "HTTP #{response.code}"
@@ -194,7 +190,6 @@ class AltTextApi
         status: response.code.to_i,
         error_code: error_code,
         errors: errors,
-        raw_body: body,
         message: message,
       )
     end
@@ -209,5 +204,14 @@ class AltTextApi
       total_pages: response["total-pages"]&.to_i || 1,
       total_count: response["total-count"]&.to_i || 0,
     }
+  end
+
+  def connection_error(exception)
+    AltTextApiError.new(
+      status: 0,
+      error_code: "connection_error",
+      errors: {},
+      message: "Could not connect to AltText.ai API: #{exception.message}",
+    )
   end
 end

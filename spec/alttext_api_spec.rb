@@ -248,6 +248,34 @@ RSpec.describe AltTextApi do
       expect(WebMock).to have_requested(:post, "#{base_url}/images/page_scrape")
         .with(body: hash_including("page_scrape" => { "url" => page_url }))
     end
+
+    context "with optional parameters" do
+      subject do
+        api.scrape_page(
+          url: page_url,
+          lang: "en,fr",
+          keywords: ["product"],
+          negative_keywords: ["logo"],
+          gpt_prompt: "Custom prompt",
+          max_chars: 120,
+          overwrite: true,
+        )
+      end
+
+      it "includes all parameters in the request body" do
+        subject
+        expect(WebMock).to have_requested(:post, "#{base_url}/images/page_scrape")
+          .with { |req|
+            body = JSON.parse(req.body)
+            body["lang"] == "en,fr" &&
+              body["keywords"] == ["product"] &&
+              body["negative_keywords"] == ["logo"] &&
+              body["gpt_prompt"] == "Custom prompt" &&
+              body["max_chars"] == 120 &&
+              body["overwrite"] == true
+          }
+      end
+    end
   end
 
   describe "error handling" do
@@ -354,6 +382,40 @@ RSpec.describe AltTextApi do
         expect { api.get_account }.to raise_error(AltTextApiError) do |error|
           expect(error.error_code).to eq("connection_error")
         end
+      end
+    end
+
+    context "write timeout" do
+      before do
+        stub_request(:get, "#{base_url}/account").to_raise(Net::WriteTimeout)
+      end
+
+      it "raises AltTextApiError with connection_error code" do
+        expect { api.get_account }.to raise_error(AltTextApiError) do |error|
+          expect(error.error_code).to eq("connection_error")
+        end
+      end
+    end
+  end
+
+  describe "connection retry" do
+    it "retries once on Errno::EPIPE" do
+      stub_request(:get, "#{base_url}/account")
+        .to_raise(Errno::EPIPE).then
+        .to_return(
+          status: 200,
+          body: { "name" => "Test" }.to_json,
+          headers: { "Content-Type" => "application/json" },
+        )
+
+      expect(api.get_account["name"]).to eq("Test")
+    end
+
+    it "raises AltTextApiError after repeated connection reset" do
+      stub_request(:get, "#{base_url}/account").to_raise(Errno::ECONNRESET)
+
+      expect { api.get_account }.to raise_error(AltTextApiError) do |error|
+        expect(error.error_code).to eq("connection_error")
       end
     end
   end
