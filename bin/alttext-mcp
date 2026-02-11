@@ -20,6 +20,33 @@ def api_args(args)
   args.except(:server_context)
 end
 
+# Shared generation options schema used by generate_alt_text and generate_alt_text_from_file
+def generation_options_schema
+  {
+    asset_id: { type: 'string', maxLength: 256, description: 'Custom asset ID (default: auto-generated hash)' },
+    lang: { type: 'string', maxLength: 64, description: "Comma-separated language codes (e.g. 'en', 'en,fr,es')" },
+    keywords: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'Keywords to incorporate' },
+    negative_keywords: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'Keywords to avoid' },
+    gpt_prompt: { type: 'string', maxLength: 768,
+                  description: 'Custom prompt template. Use {{AltText}} as a placeholder for the generated alt text.' },
+    max_chars: { type: 'integer', minimum: 1, maximum: 1000, description: 'Maximum character length for the alt text' },
+    overwrite: { type: 'boolean', description: 'Overwrite existing alt text if image was previously processed' },
+    tags: { type: 'array', items: { type: 'string' }, maxItems: 50, description: 'Tags for organization' },
+    metadata: { type: 'object', description: 'Custom metadata object' }
+  }
+end
+
+# Scrape page generation options (subset: lang, keywords, negative_keywords, gpt_prompt, max_chars)
+def scrape_options_schema
+  {
+    lang: { type: 'string', maxLength: 64, description: 'Language codes for generation' },
+    keywords: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'Keywords to incorporate' },
+    negative_keywords: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'Keywords to avoid' },
+    gpt_prompt: { type: 'string', maxLength: 768, description: 'Custom prompt override' },
+    max_chars: { type: 'integer', minimum: 1, maximum: 1000, description: 'Maximum character length' }
+  }
+end
+
 server = MCP::Server.new(name: 'alttext-ai', version: '1.0.0')
 
 server.define_tool(
@@ -27,19 +54,7 @@ server.define_tool(
   description: 'Generate AI-powered alt text for an image URL. Returns the result synchronously (may take a few seconds). Costs 1 credit per image.',
   input_schema: {
     type: 'object',
-    properties: {
-      url: { type: 'string', format: 'uri', description: 'Public URL of the image' },
-      asset_id: { type: 'string', maxLength: 256, description: 'Custom asset ID (default: auto-generated hash)' },
-      lang: { type: 'string', maxLength: 64, description: "Comma-separated language codes (e.g. 'en', 'en,fr,es')" },
-      keywords: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'Keywords to incorporate' },
-      negative_keywords: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'Keywords to avoid' },
-      gpt_prompt: { type: 'string', maxLength: 768,
-                    description: 'Custom prompt template. Use {{AltText}} as a placeholder for the generated alt text.' },
-      max_chars: { type: 'integer', minimum: 1, maximum: 1000, description: 'Maximum character length for the alt text' },
-      overwrite: { type: 'boolean', description: 'Overwrite existing alt text if image was previously processed' },
-      tags: { type: 'array', items: { type: 'string' }, maxItems: 50, description: 'Tags for organization' },
-      metadata: { type: 'object', description: 'Custom metadata object' }
-    },
+    properties: generation_options_schema.merge(url: { type: 'string', format: 'uri', description: 'Public URL of the image' }),
     required: ['url']
   }
 ) do |**args|
@@ -56,19 +71,7 @@ server.define_tool(
                'Reads the file, base64-encodes it, and sends it to AltText.ai. Costs 1 credit.',
   input_schema: {
     type: 'object',
-    properties: {
-      file_path: { type: 'string', description: 'Absolute path to a local image file' },
-      asset_id: { type: 'string', maxLength: 256, description: 'Custom asset ID (default: auto-generated hash)' },
-      lang: { type: 'string', maxLength: 64, description: "Comma-separated language codes (e.g. 'en', 'en,fr,es')" },
-      keywords: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'Keywords to incorporate' },
-      negative_keywords: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'Keywords to avoid' },
-      gpt_prompt: { type: 'string', maxLength: 768,
-                    description: 'Custom prompt template. Use {{AltText}} as a placeholder for the generated alt text.' },
-      max_chars: { type: 'integer', minimum: 1, maximum: 1000, description: 'Maximum character length for the alt text' },
-      overwrite: { type: 'boolean', description: 'Overwrite existing alt text if image was previously processed' },
-      tags: { type: 'array', items: { type: 'string' }, maxItems: 50, description: 'Tags for organization' },
-      metadata: { type: 'object', description: 'Custom metadata object' }
-    },
+    properties: generation_options_schema.merge(file_path: { type: 'string', description: 'Absolute path to a local image file' }),
     required: ['file_path']
   }
 ) do |file_path:, **args|
@@ -271,14 +274,8 @@ server.define_tool(
     properties: {
       url: { type: 'string', format: 'uri', description: 'URL of the web page to scrape' },
       html: { type: 'string', maxLength: 500_000, description: 'Optional HTML override (if omitted, server fetches the page)' },
-      include_existing: { type: 'boolean', description: 'Include images that already have alt text' },
-      lang: { type: 'string', maxLength: 64, description: 'Language codes for generation' },
-      keywords: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'Keywords to incorporate' },
-      negative_keywords: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'Keywords to avoid' },
-      gpt_prompt: { type: 'string', maxLength: 768, description: 'Custom prompt override' },
-      max_chars: { type: 'integer', minimum: 1, maximum: 1000, description: 'Maximum character length' },
-      overwrite: { type: 'boolean', description: 'Overwrite existing alt text' }
-    },
+      include_existing: { type: 'boolean', description: 'Include images that already have alt text' }
+    }.merge(scrape_options_schema),
     required: ['url']
   }
 ) do |**args|
