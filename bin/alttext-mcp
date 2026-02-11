@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require "bundler/setup"
+require "json"
 require "mcp"
 require_relative "../lib/alttext_api"
 
