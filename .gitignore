@@ -1,3 +1,5 @@
 .bundle
 vendor
 .DS_Store
+.env
+.env.*

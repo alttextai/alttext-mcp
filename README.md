@@ -6,7 +6,7 @@ Works with Claude Desktop, Claude Code, Cursor, Windsurf, and any MCP-compatible
 
 ## Prerequisites
 
-- Ruby 3.1+
+- Ruby 3.2+
 - An [AltText.ai](https://alttext.ai) account with an API key
 
 ## Installation

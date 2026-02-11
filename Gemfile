@@ -1,5 +1,7 @@
 source "https://rubygems.org"
 
+ruby ">= 3.2"
+
 gem "mcp", "~> 0.6"
 
 group :test do
