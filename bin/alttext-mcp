@@ -87,8 +87,8 @@ server.define_tool(
     required: ["url"],
   },
 ) do |args, server_context:|
-  image = api.create_image(**args.transform_keys(&:to_sym))
-  MCP::Tool::Response.new([{ type: "text", text: "Generated alt text for #{args["url"]}:\n\n#{format_image(image)}" }])
+  image = api.create_image(**args)
+  MCP::Tool::Response.new([{ type: "text", text: "Generated alt text for #{args[:url]}:\n\n#{format_image(image)}" }])
 rescue AltTextApiError, StandardError => e
   format_error(e)
 end
@@ -104,7 +104,7 @@ server.define_tool(
     },
   },
 ) do |args, server_context:|
-  result = api.list_images(**args.transform_keys(&:to_sym))
+  result = api.list_images(**args)
   MCP::Tool::Response.new([{ type: "text", text: format_image_list(result) }])
 rescue AltTextApiError, StandardError => e
   format_error(e)
@@ -122,8 +122,8 @@ server.define_tool(
     required: ["query"],
   },
 ) do |args, server_context:|
-  result = api.search_images(**args.transform_keys(&:to_sym))
-  MCP::Tool::Response.new([{ type: "text", text: "Search results for \"#{args["query"]}\":\n\n#{format_image_list(result)}" }])
+  result = api.search_images(**args)
+  MCP::Tool::Response.new([{ type: "text", text: "Search results for \"#{args[:query]}\":\n\n#{format_image_list(result)}" }])
 rescue AltTextApiError, StandardError => e
   format_error(e)
 end
@@ -139,7 +139,7 @@ server.define_tool(
     required: ["asset_id"],
   },
 ) do |args, server_context:|
-  image = api.get_image(**args.transform_keys(&:to_sym))
+  image = api.get_image(**args)
   MCP::Tool::Response.new([{ type: "text", text: format_image(image) }])
 rescue AltTextApiError, StandardError => e
   format_error(e)
@@ -160,8 +160,8 @@ server.define_tool(
     required: ["asset_id"],
   },
 ) do |args, server_context:|
-  image = api.update_image(**args.transform_keys(&:to_sym))
-  MCP::Tool::Response.new([{ type: "text", text: "Updated image #{args["asset_id"]}:\n\n#{format_image(image)}" }])
+  image = api.update_image(**args)
+  MCP::Tool::Response.new([{ type: "text", text: "Updated image #{args[:asset_id]}:\n\n#{format_image(image)}" }])
 rescue AltTextApiError, StandardError => e
   format_error(e)
 end
@@ -176,8 +176,8 @@ server.define_tool(
     required: ["asset_id"],
   },
 ) do |args, server_context:|
-  api.delete_image(asset_id: args["asset_id"])
-  MCP::Tool::Response.new([{ type: "text", text: "Deleted image #{args["asset_id"]}" }])
+  api.delete_image(asset_id: args[:asset_id])
+  MCP::Tool::Response.new([{ type: "text", text: "Deleted image #{args[:asset_id]}" }])
 rescue AltTextApiError, StandardError => e
   format_error(e)
 end
@@ -226,11 +226,11 @@ server.define_tool(
     required: ["url"],
   },
 ) do |args, server_context:|
-  result = api.scrape_page(**args.transform_keys(&:to_sym))
+  result = api.scrape_page(**args)
   scraped = result["scraped_images"] || []
 
   lines = [
-    "Scraped #{args["url"]}",
+    "Scraped #{args[:url]}",
     "Images found: #{scraped.length}",
     "Images queued for processing: #{result["total_processed"]}",
     "",
