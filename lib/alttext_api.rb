@@ -33,6 +33,18 @@ class AltTextApi
     data
   end
 
+  def update_account(name: nil, webhook_url: nil, notification_email: nil)
+    account_envelope = {}
+    account_envelope[:name] = name if name
+    account_envelope[:webhook_url] = webhook_url if webhook_url
+    account_envelope[:notification_email] = notification_email if notification_email
+
+    body = { account: account_envelope }
+
+    data, = request(:patch, '/account', body: body)
+    data
+  end
+
   def list_images(page: nil, limit: nil, lang: nil)
     query = {}
     query[:page] = page if page
@@ -80,6 +92,32 @@ class AltTextApi
     body[:gpt_prompt] = gpt_prompt if gpt_prompt
     body[:max_chars] = max_chars if max_chars
     body[:overwrite] = overwrite unless overwrite.nil?
+
+    data, = request(:post, '/images', body: body)
+    data
+  end
+
+  def create_image_from_raw(raw:, asset_id: nil, lang: nil, keywords: nil, negative_keywords: nil,
+                            gpt_prompt: nil, max_chars: nil, overwrite: nil, tags: nil, metadata: nil)
+    image_envelope = { raw: raw }
+    image_envelope[:asset_id] = asset_id if asset_id
+    image_envelope[:tags] = tags if tags
+    image_envelope[:metadata] = metadata if metadata
+
+    body = { image: image_envelope, async: false }
+    body[:lang] = lang if lang
+    body[:keywords] = keywords if keywords
+    body[:negative_keywords] = negative_keywords if negative_keywords
+    body[:gpt_prompt] = gpt_prompt if gpt_prompt
+    body[:max_chars] = max_chars if max_chars
+    body[:overwrite] = overwrite unless overwrite.nil?
+
+    data, = request(:post, '/images', body: body)
+    data
+  end
+
+  def translate_image(asset_id:, lang:)
+    body = { image: { asset_id: asset_id }, lang: lang, async: false }
 
     data, = request(:post, '/images', body: body)
     data

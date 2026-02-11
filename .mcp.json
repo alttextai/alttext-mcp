@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "alttext-ai": {
+      "command": "ruby",
+      "args": ["/Users/josh/web/alttext-mcp/bin/alttext-mcp"],
+      "env": {
+        "ALTTEXT_API_KEY": "32ba26609e32063a8ceb680384f36e09"
+      }
+    }
+  }
+}

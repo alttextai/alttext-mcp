@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require 'bundler/setup'
+require 'base64'
 require 'mcp'
 require_relative '../lib/formatters'
 
@@ -12,6 +13,12 @@ unless api_key
 end
 
 api = AltTextApi.new(api_key: api_key, base_url: ENV.fetch('ALTTEXT_API_BASE_URL', nil))
+
+# The mcp gem injects server_context: into **kwargs blocks.
+# Strip it before forwarding to API methods.
+def api_args(args)
+  args.except(:server_context)
+end
 
 server = MCP::Server.new(name: 'alttext-ai', version: '1.0.0')
 
@@ -35,9 +42,61 @@ server.define_tool(
     },
     required: ['url']
   }
-) do |args, _server_context:|
+) do |**args|
+  args = api_args(args)
   image = api.create_image(**args)
   MCP::Tool::Response.new([{ type: 'text', text: "Generated alt text for #{args[:url]}:\n\n#{Formatters.format_image(image)}" }])
+rescue StandardError => e
+  Formatters.error_response(e)
+end
+
+server.define_tool(
+  name: 'generate_alt_text_from_file',
+  description: 'Generate alt text from a local image file. ' \
+               'Reads the file, base64-encodes it, and sends it to AltText.ai. Costs 1 credit.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      file_path: { type: 'string', description: 'Absolute path to a local image file' },
+      asset_id: { type: 'string', maxLength: 256, description: 'Custom asset ID (default: auto-generated hash)' },
+      lang: { type: 'string', maxLength: 64, description: "Comma-separated language codes (e.g. 'en', 'en,fr,es')" },
+      keywords: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'Keywords to incorporate' },
+      negative_keywords: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'Keywords to avoid' },
+      gpt_prompt: { type: 'string', maxLength: 768,
+                    description: 'Custom prompt template. Use {{AltText}} as a placeholder for the generated alt text.' },
+      max_chars: { type: 'integer', minimum: 1, maximum: 1000, description: 'Maximum character length for the alt text' },
+      overwrite: { type: 'boolean', description: 'Overwrite existing alt text if image was previously processed' },
+      tags: { type: 'array', items: { type: 'string' }, maxItems: 50, description: 'Tags for organization' },
+      metadata: { type: 'object', description: 'Custom metadata object' }
+    },
+    required: ['file_path']
+  }
+) do |file_path:, **args|
+  args = api_args(args)
+  raw = Base64.strict_encode64(File.binread(file_path))
+  image = api.create_image_from_raw(raw: raw, **args)
+  MCP::Tool::Response.new([{ type: 'text', text: "Generated alt text for #{File.basename(file_path)}:\n\n#{Formatters.format_image(image)}" }])
+rescue StandardError => e
+  Formatters.error_response(e)
+end
+
+server.define_tool(
+  name: 'translate_image',
+  description: 'Add alt text in a new language for an existing image. ' \
+               'Uses the asset_id to find the image and generates a translation. Costs 1 credit.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      asset_id: { type: 'string', description: 'The asset ID of the existing image to translate' },
+      lang: { type: 'string', maxLength: 64,
+              description: "Target language code(s), comma-separated (e.g. 'de', 'fr,es')" }
+    },
+    required: %w[asset_id lang]
+  }
+) do |**args|
+  args = api_args(args)
+  image = api.translate_image(**args)
+  MCP::Tool::Response.new([{ type: 'text', text: "Translated image #{args[:asset_id]} to #{args[:lang]}:\n\n#{Formatters.format_image(image)}" }])
 rescue StandardError => e
   Formatters.error_response(e)
 end
@@ -53,7 +112,8 @@ server.define_tool(
       lang: { type: 'string', description: 'Filter alt texts by language code' }
     }
   }
-) do |args, _server_context:|
+) do |**args|
+  args = api_args(args)
   result = api.list_images(**args)
   MCP::Tool::Response.new([{ type: 'text', text: Formatters.format_image_list(result) }])
 rescue StandardError => e
@@ -72,7 +132,8 @@ server.define_tool(
     },
     required: ['query']
   }
-) do |args, _server_context:|
+) do |**args|
+  args = api_args(args)
   result = api.search_images(**args)
   MCP::Tool::Response.new([{ type: 'text', text: "Search results for \"#{args[:query]}\":\n\n#{Formatters.format_image_list(result)}" }])
 rescue StandardError => e
@@ -90,7 +151,8 @@ server.define_tool(
     },
     required: ['asset_id']
   }
-) do |args, _server_context:|
+) do |**args|
+  args = api_args(args)
   image = api.get_image(**args)
   MCP::Tool::Response.new([{ type: 'text', text: Formatters.format_image(image) }])
 rescue StandardError => e
@@ -112,7 +174,8 @@ server.define_tool(
     },
     required: ['asset_id']
   }
-) do |args, _server_context:|
+) do |**args|
+  args = api_args(args)
   image = api.update_image(**args)
   MCP::Tool::Response.new([{ type: 'text', text: "Updated image #{args[:asset_id]}:\n\n#{Formatters.format_image(image)}" }])
 rescue StandardError => e
@@ -129,7 +192,8 @@ server.define_tool(
     },
     required: ['asset_id']
   }
-) do |args, _server_context:|
+) do |**args|
+  args = api_args(args)
   api.delete_image(**args)
   MCP::Tool::Response.new([{ type: 'text', text: "Deleted image #{args[:asset_id]}" }])
 rescue StandardError => e
@@ -140,9 +204,28 @@ server.define_tool(
   name: 'get_account',
   description: 'Get your AltText.ai account info including credit balance, usage, and settings',
   input_schema: { type: 'object', properties: {} }
-) do |_args, _server_context:|
+) do |**_args|
   account = api.get_account
   MCP::Tool::Response.new([{ type: 'text', text: Formatters.format_account(account) }])
+rescue StandardError => e
+  Formatters.error_response(e)
+end
+
+server.define_tool(
+  name: 'update_account',
+  description: 'Update your AltText.ai account settings (name, webhook URL, notification email)',
+  input_schema: {
+    type: 'object',
+    properties: {
+      name: { type: 'string', description: 'Account name' },
+      webhook_url: { type: 'string', format: 'uri', description: 'Webhook URL for processing notifications' },
+      notification_email: { type: 'string', format: 'email', description: 'Email address for notifications' }
+    }
+  }
+) do |**args|
+  args = api_args(args)
+  account = api.update_account(**args)
+  MCP::Tool::Response.new([{ type: 'text', text: "Updated account settings:\n\n#{Formatters.format_account(account)}" }])
 rescue StandardError => e
   Formatters.error_response(e)
 end
@@ -165,7 +248,8 @@ server.define_tool(
     },
     required: ['url']
   }
-) do |args, _server_context:|
+) do |**args|
+  args = api_args(args)
   result = api.scrape_page(**args)
   MCP::Tool::Response.new([{ type: 'text', text: Formatters.format_scrape_result(result, args[:url]) }])
 rescue StandardError => e
