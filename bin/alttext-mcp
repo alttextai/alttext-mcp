@@ -60,9 +60,9 @@ def format_error(error)
   if error.is_a?(AltTextApiError)
     parts = ["Error (#{error.status}): #{error.message}"]
     parts << "Code: #{error.error_code}" if error.error_code
-    MCP::Tool::Response.new([{ type: "text", text: parts.join("\n") }], is_error: true)
+    MCP::Tool::Response.new([{ type: "text", text: parts.join("\n") }], error: true)
   else
-    MCP::Tool::Response.new([{ type: "text", text: "Error: #{error.message}" }], is_error: true)
+    MCP::Tool::Response.new([{ type: "text", text: "Error: #{error.message}" }], error: true)
   end
 end
 
