@@ -1,10 +1,16 @@
-source "https://rubygems.org"
+# frozen_string_literal: true
 
-ruby ">= 3.2"
+source 'https://rubygems.org'
 
-gem "mcp", "~> 0.6"
+ruby '>= 3.2'
+
+gem 'mcp', '~> 0.6'
+
+group :development, :test do
+  gem 'rubocop', '~> 1.72', require: false
+end
 
 group :test do
-  gem "rspec", "~> 3.13"
-  gem "webmock", "~> 3.24"
+  gem 'rspec', '~> 3.13'
+  gem 'webmock', '~> 3.24'
 end

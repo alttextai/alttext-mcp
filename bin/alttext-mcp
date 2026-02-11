@@ -1,176 +1,177 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-require "bundler/setup"
-require "mcp"
-require_relative "../lib/formatters"
+require 'bundler/setup'
+require 'mcp'
+require_relative '../lib/formatters'
 
-api_key = ENV["ALTTEXT_API_KEY"]
+api_key = ENV.fetch('ALTTEXT_API_KEY', nil)
 unless api_key
-  warn "ALTTEXT_API_KEY environment variable is required"
+  warn 'ALTTEXT_API_KEY environment variable is required'
   exit 1
 end
 
-api = AltTextApi.new(api_key: api_key, base_url: ENV["ALTTEXT_API_BASE_URL"])
+api = AltTextApi.new(api_key: api_key, base_url: ENV.fetch('ALTTEXT_API_BASE_URL', nil))
 
-server = MCP::Server.new(name: "alttext-ai", version: "1.0.0")
+server = MCP::Server.new(name: 'alttext-ai', version: '1.0.0')
 
 server.define_tool(
-  name: "generate_alt_text",
-  description: "Generate AI-powered alt text for an image URL. Returns the result synchronously (may take a few seconds). Costs 1 credit per image.",
+  name: 'generate_alt_text',
+  description: 'Generate AI-powered alt text for an image URL. Returns the result synchronously (may take a few seconds). Costs 1 credit per image.',
   input_schema: {
-    type: "object",
+    type: 'object',
     properties: {
-      url: { type: "string", format: "uri", description: "Public URL of the image" },
-      asset_id: { type: "string", maxLength: 256, description: "Custom asset ID (default: auto-generated hash)" },
-      lang: { type: "string", maxLength: 64, description: "Comma-separated language codes (e.g. 'en', 'en,fr,es')" },
-      keywords: { type: "array", items: { type: "string" }, maxItems: 20, description: "Keywords to incorporate" },
-      negative_keywords: { type: "array", items: { type: "string" }, maxItems: 20, description: "Keywords to avoid" },
-      gpt_prompt: { type: "string", maxLength: 768, description: "Custom prompt template. Use {{AltText}} as a placeholder for the generated alt text." },
-      max_chars: { type: "integer", minimum: 1, maximum: 1000, description: "Maximum character length for the alt text" },
-      overwrite: { type: "boolean", description: "Overwrite existing alt text if image was previously processed" },
-      tags: { type: "array", items: { type: "string" }, maxItems: 50, description: "Tags for organization" },
-      metadata: { type: "object", description: "Custom metadata object" },
+      url: { type: 'string', format: 'uri', description: 'Public URL of the image' },
+      asset_id: { type: 'string', maxLength: 256, description: 'Custom asset ID (default: auto-generated hash)' },
+      lang: { type: 'string', maxLength: 64, description: "Comma-separated language codes (e.g. 'en', 'en,fr,es')" },
+      keywords: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'Keywords to incorporate' },
+      negative_keywords: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'Keywords to avoid' },
+      gpt_prompt: { type: 'string', maxLength: 768,
+                    description: 'Custom prompt template. Use {{AltText}} as a placeholder for the generated alt text.' },
+      max_chars: { type: 'integer', minimum: 1, maximum: 1000, description: 'Maximum character length for the alt text' },
+      overwrite: { type: 'boolean', description: 'Overwrite existing alt text if image was previously processed' },
+      tags: { type: 'array', items: { type: 'string' }, maxItems: 50, description: 'Tags for organization' },
+      metadata: { type: 'object', description: 'Custom metadata object' }
     },
-    required: ["url"],
-  },
-) do |args, server_context:|
+    required: ['url']
+  }
+) do |args, _server_context:|
   image = api.create_image(**args)
-  MCP::Tool::Response.new([{ type: "text", text: "Generated alt text for #{args[:url]}:\n\n#{Formatters.format_image(image)}" }])
+  MCP::Tool::Response.new([{ type: 'text', text: "Generated alt text for #{args[:url]}:\n\n#{Formatters.format_image(image)}" }])
 rescue StandardError => e
   Formatters.error_response(e)
 end
 
 server.define_tool(
-  name: "list_images",
-  description: "List images in your AltText.ai library with pagination",
+  name: 'list_images',
+  description: 'List images in your AltText.ai library with pagination',
   input_schema: {
-    type: "object",
+    type: 'object',
     properties: {
-      page: { type: "integer", minimum: 1, description: "Page number (default: 1)" },
-      limit: { type: "integer", minimum: 1, maximum: 100, description: "Items per page (default: 20, max: 100)" },
-      lang: { type: "string", description: "Filter alt texts by language code" },
-    },
-  },
-) do |args, server_context:|
+      page: { type: 'integer', minimum: 1, description: 'Page number (default: 1)' },
+      limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Items per page (default: 20, max: 100)' },
+      lang: { type: 'string', description: 'Filter alt texts by language code' }
+    }
+  }
+) do |args, _server_context:|
   result = api.list_images(**args)
-  MCP::Tool::Response.new([{ type: "text", text: Formatters.format_image_list(result) }])
+  MCP::Tool::Response.new([{ type: 'text', text: Formatters.format_image_list(result) }])
 rescue StandardError => e
   Formatters.error_response(e)
 end
 
 server.define_tool(
-  name: "search_images",
-  description: "Search images by alt text content",
+  name: 'search_images',
+  description: 'Search images by alt text content',
   input_schema: {
-    type: "object",
+    type: 'object',
     properties: {
-      query: { type: "string", maxLength: 256, description: "Search query to match against alt text" },
-      limit: { type: "integer", minimum: 1, maximum: 100, description: "Max results to return (default: 20)" },
-      lang: { type: "string", description: "Filter by language code" },
+      query: { type: 'string', maxLength: 256, description: 'Search query to match against alt text' },
+      limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Max results to return (default: 20)' },
+      lang: { type: 'string', description: 'Filter by language code' }
     },
-    required: ["query"],
-  },
-) do |args, server_context:|
+    required: ['query']
+  }
+) do |args, _server_context:|
   result = api.search_images(**args)
-  MCP::Tool::Response.new([{ type: "text", text: "Search results for \"#{args[:query]}\":\n\n#{Formatters.format_image_list(result)}" }])
+  MCP::Tool::Response.new([{ type: 'text', text: "Search results for \"#{args[:query]}\":\n\n#{Formatters.format_image_list(result)}" }])
 rescue StandardError => e
   Formatters.error_response(e)
 end
 
 server.define_tool(
-  name: "get_image",
-  description: "Get details for a specific image by its asset ID",
+  name: 'get_image',
+  description: 'Get details for a specific image by its asset ID',
   input_schema: {
-    type: "object",
+    type: 'object',
     properties: {
-      asset_id: { type: "string", description: "The asset ID of the image" },
-      lang: { type: "string", description: "Filter alt texts by language code" },
+      asset_id: { type: 'string', description: 'The asset ID of the image' },
+      lang: { type: 'string', description: 'Filter alt texts by language code' }
     },
-    required: ["asset_id"],
-  },
-) do |args, server_context:|
+    required: ['asset_id']
+  }
+) do |args, _server_context:|
   image = api.get_image(**args)
-  MCP::Tool::Response.new([{ type: "text", text: Formatters.format_image(image) }])
+  MCP::Tool::Response.new([{ type: 'text', text: Formatters.format_image(image) }])
 rescue StandardError => e
   Formatters.error_response(e)
 end
 
 server.define_tool(
-  name: "update_image",
-  description: "Update alt text and/or metadata for an existing image",
+  name: 'update_image',
+  description: 'Update alt text and/or metadata for an existing image',
   input_schema: {
-    type: "object",
+    type: 'object',
     properties: {
-      asset_id: { type: "string", maxLength: 256, description: "The asset ID of the image to update" },
-      alt_text: { type: "string", maxLength: 1000, description: "New alt text value" },
-      tags: { type: "array", items: { type: "string" }, maxItems: 50, description: "Replace tags" },
-      metadata: { type: "object", description: "Replace metadata" },
-      lang: { type: "string", maxLength: 64, description: "Language code for the alt text (default: 'en')" },
-      overwrite: { type: "boolean", description: "If false, skip language entries that already exist" },
+      asset_id: { type: 'string', maxLength: 256, description: 'The asset ID of the image to update' },
+      alt_text: { type: 'string', maxLength: 1000, description: 'New alt text value' },
+      tags: { type: 'array', items: { type: 'string' }, maxItems: 50, description: 'Replace tags' },
+      metadata: { type: 'object', description: 'Replace metadata' },
+      lang: { type: 'string', maxLength: 64, description: "Language code for the alt text (default: 'en')" },
+      overwrite: { type: 'boolean', description: 'If false, skip language entries that already exist' }
     },
-    required: ["asset_id"],
-  },
-) do |args, server_context:|
+    required: ['asset_id']
+  }
+) do |args, _server_context:|
   image = api.update_image(**args)
-  MCP::Tool::Response.new([{ type: "text", text: "Updated image #{args[:asset_id]}:\n\n#{Formatters.format_image(image)}" }])
+  MCP::Tool::Response.new([{ type: 'text', text: "Updated image #{args[:asset_id]}:\n\n#{Formatters.format_image(image)}" }])
 rescue StandardError => e
   Formatters.error_response(e)
 end
 
 server.define_tool(
-  name: "delete_image",
-  description: "Delete an image from your AltText.ai library",
+  name: 'delete_image',
+  description: 'Delete an image from your AltText.ai library',
   input_schema: {
-    type: "object",
+    type: 'object',
     properties: {
-      asset_id: { type: "string", description: "The asset ID of the image to delete" },
+      asset_id: { type: 'string', description: 'The asset ID of the image to delete' }
     },
-    required: ["asset_id"],
-  },
-) do |args, server_context:|
+    required: ['asset_id']
+  }
+) do |args, _server_context:|
   api.delete_image(**args)
-  MCP::Tool::Response.new([{ type: "text", text: "Deleted image #{args[:asset_id]}" }])
+  MCP::Tool::Response.new([{ type: 'text', text: "Deleted image #{args[:asset_id]}" }])
 rescue StandardError => e
   Formatters.error_response(e)
 end
 
 server.define_tool(
-  name: "get_account",
-  description: "Get your AltText.ai account info including credit balance, usage, and settings",
-  input_schema: { type: "object", properties: {} },
-) do |_args, server_context:|
+  name: 'get_account',
+  description: 'Get your AltText.ai account info including credit balance, usage, and settings',
+  input_schema: { type: 'object', properties: {} }
+) do |_args, _server_context:|
   account = api.get_account
-  MCP::Tool::Response.new([{ type: "text", text: Formatters.format_account(account) }])
+  MCP::Tool::Response.new([{ type: 'text', text: Formatters.format_account(account) }])
 rescue StandardError => e
   Formatters.error_response(e)
 end
 
 server.define_tool(
-  name: "scrape_page",
-  description: "Find images on a web page and queue alt-text generation jobs. Images are processed asynchronously.",
+  name: 'scrape_page',
+  description: 'Find images on a web page and queue alt-text generation jobs. Images are processed asynchronously.',
   input_schema: {
-    type: "object",
+    type: 'object',
     properties: {
-      url: { type: "string", format: "uri", description: "URL of the web page to scrape" },
-      html: { type: "string", maxLength: 500_000, description: "Optional HTML override (if omitted, server fetches the page)" },
-      include_existing: { type: "boolean", description: "Include images that already have alt text" },
-      lang: { type: "string", maxLength: 64, description: "Language codes for generation" },
-      keywords: { type: "array", items: { type: "string" }, maxItems: 20, description: "Keywords to incorporate" },
-      negative_keywords: { type: "array", items: { type: "string" }, maxItems: 20, description: "Keywords to avoid" },
-      gpt_prompt: { type: "string", maxLength: 768, description: "Custom prompt override" },
-      max_chars: { type: "integer", minimum: 1, maximum: 1000, description: "Maximum character length" },
-      overwrite: { type: "boolean", description: "Overwrite existing alt text" },
+      url: { type: 'string', format: 'uri', description: 'URL of the web page to scrape' },
+      html: { type: 'string', maxLength: 500_000, description: 'Optional HTML override (if omitted, server fetches the page)' },
+      include_existing: { type: 'boolean', description: 'Include images that already have alt text' },
+      lang: { type: 'string', maxLength: 64, description: 'Language codes for generation' },
+      keywords: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'Keywords to incorporate' },
+      negative_keywords: { type: 'array', items: { type: 'string' }, maxItems: 20, description: 'Keywords to avoid' },
+      gpt_prompt: { type: 'string', maxLength: 768, description: 'Custom prompt override' },
+      max_chars: { type: 'integer', minimum: 1, maximum: 1000, description: 'Maximum character length' },
+      overwrite: { type: 'boolean', description: 'Overwrite existing alt text' }
     },
-    required: ["url"],
-  },
-) do |args, server_context:|
+    required: ['url']
+  }
+) do |args, _server_context:|
   result = api.scrape_page(**args)
-  MCP::Tool::Response.new([{ type: "text", text: Formatters.format_scrape_result(result, args[:url]) }])
+  MCP::Tool::Response.new([{ type: 'text', text: Formatters.format_scrape_result(result, args[:url]) }])
 rescue StandardError => e
   Formatters.error_response(e)
 end
 
 transport = MCP::Server::Transports::StdioTransport.new(server)
-warn "AltText.ai MCP Server running on stdio"
+warn 'AltText.ai MCP Server running on stdio'
 transport.open

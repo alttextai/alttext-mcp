@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-require "net/http"
-require "uri"
-require "json"
+require 'net/http'
+require 'uri'
+require 'json'
 
 class AltTextApiError < StandardError
   attr_reader :status, :error_code, :errors
@@ -18,10 +18,10 @@ end
 class AltTextApi
   def initialize(api_key:, base_url: nil)
     @api_key = api_key
-    @base_url = (base_url || "https://alttext.ai/api/v1").chomp("/")
+    @base_url = (base_url || 'https://alttext.ai/api/v1').chomp('/')
     @uri = URI(@base_url)
     @http = Net::HTTP.new(@uri.host, @uri.port)
-    @http.use_ssl = @uri.scheme == "https"
+    @http.use_ssl = @uri.scheme == 'https'
     @http.open_timeout = 10
     @http.read_timeout = 120
     @http.write_timeout = 30
@@ -29,7 +29,7 @@ class AltTextApi
   end
 
   def get_account
-    data, = request(:get, "/account")
+    data, = request(:get, '/account')
     data
   end
 
@@ -39,10 +39,10 @@ class AltTextApi
     query[:limit] = limit if limit
     query[:lang] = lang if lang
 
-    data, headers = request(:get, "/images", query: query)
+    data, headers = request(:get, '/images', query: query)
     {
-      images: data["images"],
-      pagination: parse_pagination(headers),
+      images: data['images'],
+      pagination: parse_pagination(headers)
     }
   end
 
@@ -51,10 +51,10 @@ class AltTextApi
     params[:limit] = limit if limit
     params[:lang] = lang if lang
 
-    data, headers = request(:get, "/images/search", query: params)
+    data, headers = request(:get, '/images/search', query: params)
     {
-      images: data["images"],
-      pagination: parse_pagination(headers),
+      images: data['images'],
+      pagination: parse_pagination(headers)
     }
   end
 
@@ -81,7 +81,7 @@ class AltTextApi
     body[:max_chars] = max_chars if max_chars
     body[:overwrite] = overwrite unless overwrite.nil?
 
-    data, = request(:post, "/images", body: body)
+    data, = request(:post, '/images', body: body)
     data
   end
 
@@ -118,7 +118,7 @@ class AltTextApi
     body[:max_chars] = max_chars if max_chars
     body[:overwrite] = overwrite unless overwrite.nil?
 
-    data, = request(:post, "/images/page_scrape", body: body)
+    data, = request(:post, '/images/page_scrape', body: body)
     data
   end
 
@@ -126,9 +126,7 @@ class AltTextApi
 
   def request(method, path, body: nil, query: nil)
     uri = URI("#{@base_url}#{path}")
-    if query&.any?
-      uri.query = URI.encode_www_form(query.compact)
-    end
+    uri.query = URI.encode_www_form(query.compact) if query&.any?
 
     req = build_request(method, uri, body)
     retried = false
@@ -137,8 +135,13 @@ class AltTextApi
       response = @http.request(req)
       handle_response(response)
     rescue Errno::EPIPE, IOError, Errno::ECONNRESET => e
-      @http.finish rescue nil
+      begin
+        @http.finish
+      rescue StandardError
+        nil
+      end
       raise connection_error(e) if retried
+
       retried = true
       retry
     rescue Errno::ECONNREFUSED, Net::OpenTimeout, Net::ReadTimeout, Net::WriteTimeout, SocketError => e
@@ -160,11 +163,11 @@ class AltTextApi
             end
 
     req = klass.new(uri)
-    req["X-API-Key"] = @api_key
-    req["Accept"] = "application/json"
+    req['X-API-Key'] = @api_key
+    req['Accept'] = 'application/json'
 
     if body
-      req["Content-Type"] = "application/json"
+      req['Content-Type'] = 'application/json'
       req.body = JSON.generate(body)
     end
 
@@ -173,24 +176,24 @@ class AltTextApi
 
   def handle_response(response)
     body = begin
-      JSON.parse(response.body || "{}")
+      JSON.parse(response.body || '{}')
     rescue JSON::ParserError
       {}
     end
 
     unless response.is_a?(Net::HTTPSuccess)
-      error_code = body["error_code"]
-      errors = body["errors"]
+      error_code = body['error_code']
+      errors = body['errors']
       errors = {} unless errors.is_a?(Hash)
-      message = body["error"] ||
-                errors.values.flatten.join(", ").then { |s| s.empty? ? nil : s } ||
+      message = body['error'] ||
+                errors.values.flatten.join(', ').then { |s| s.empty? ? nil : s } ||
                 "HTTP #{response.code}"
 
       raise AltTextApiError.new(
         status: response.code.to_i,
         error_code: error_code,
         errors: errors,
-        message: message,
+        message: message
       )
     end
 
@@ -199,19 +202,19 @@ class AltTextApi
 
   def parse_pagination(response)
     {
-      current_page: response["current-page"]&.to_i || 1,
-      page_items: response["page-items"]&.to_i || 20,
-      total_pages: response["total-pages"]&.to_i || 1,
-      total_count: response["total-count"]&.to_i || 0,
+      current_page: response['current-page']&.to_i || 1,
+      page_items: response['page-items']&.to_i || 20,
+      total_pages: response['total-pages']&.to_i || 1,
+      total_count: response['total-count'].to_i
     }
   end
 
   def connection_error(exception)
     AltTextApiError.new(
       status: 0,
-      error_code: "connection_error",
+      error_code: 'connection_error',
       errors: {},
-      message: "Could not connect to AltText.ai API: #{exception.message}",
+      message: "Could not connect to AltText.ai API: #{exception.message}"
     )
   end
 end

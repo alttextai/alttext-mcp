@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-require "webmock/rspec"
-require_relative "../lib/alttext_api"
+require 'webmock/rspec'
+require_relative '../lib/alttext_api'
 
 WebMock.disable_net_connect!
 
