@@ -4,6 +4,7 @@ require 'net/http'
 require 'uri'
 require 'json'
 
+# rubocop:disable Metrics/ClassLength
 class AltTextApiError < StandardError
   attr_reader :status, :error_code, :errors
 
@@ -142,6 +143,39 @@ class AltTextApi
     data
   end
 
+  def bulk_create(csv_file:, email: nil)
+    uri = URI("#{@base_url}/images/bulk_create")
+
+    req = Net::HTTP::Post.new(uri)
+    req['X-API-Key'] = @api_key
+    req['Accept'] = 'application/json'
+
+    form_data = [['file', csv_file]]
+    form_data << ['email', email] if email
+
+    req.set_form(form_data, 'multipart/form-data')
+
+    retried = false
+    begin
+      ensure_connected
+      response = @http.request(req)
+      data, = handle_response(response)
+      data
+    rescue Errno::EPIPE, IOError, Errno::ECONNRESET => e
+      begin
+        @http.finish
+      rescue StandardError
+        nil
+      end
+      raise connection_error(e) if retried
+
+      retried = true
+      retry
+    rescue Errno::ECONNREFUSED, Net::OpenTimeout, Net::ReadTimeout, Net::WriteTimeout, SocketError => e
+      raise connection_error(e)
+    end
+  end
+
   def scrape_page(url:, html: nil, include_existing: nil, lang: nil, keywords: nil,
                   negative_keywords: nil, gpt_prompt: nil, max_chars: nil, overwrite: nil)
     page_scrape_envelope = { url: url }
@@ -256,3 +290,4 @@ class AltTextApi
     )
   end
 end
+# rubocop:enable Metrics/ClassLength

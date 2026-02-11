@@ -231,6 +231,39 @@ rescue StandardError => e
 end
 
 server.define_tool(
+  name: 'bulk_create',
+  description: 'Bulk generate alt text for multiple images from a CSV file. ' \
+               'CSV should have columns: url (required), asset_id, lang, keywords, tags, metadata (optional).',
+  input_schema: {
+    type: 'object',
+    properties: {
+      csv_file: { type: 'string', description: 'Path to CSV file with image URLs and optional metadata' },
+      email: { type: 'string', format: 'email', description: 'Email for completion notification' }
+    },
+    required: ['csv_file']
+  }
+) do |csv_file:, email: nil, **args|
+  args = api_args(args)
+  return Formatters.error_response(StandardError.new("CSV file not found: #{csv_file}")) unless File.exist?(csv_file)
+
+  file = File.open(csv_file, 'rb')
+  result = api.bulk_create(csv_file: file, email: email, **args)
+  file.close
+
+  rows = result['rows'] || 0
+  errors = result['row_errors'] || []
+  error_msg = result['error']
+
+  response_text = "Bulk import processed #{rows} rows"
+  response_text += "\n\nErrors:\n#{errors.join("\n")}" if errors.any?
+  response_text += "\n\nFile error: #{error_msg}" if error_msg.present?
+
+  MCP::Tool::Response.new([{ type: 'text', text: response_text }])
+rescue StandardError => e
+  Formatters.error_response(e)
+end
+
+server.define_tool(
   name: 'scrape_page',
   description: 'Find images on a web page and queue alt-text generation jobs. Images are processed asynchronously.',
   input_schema: {

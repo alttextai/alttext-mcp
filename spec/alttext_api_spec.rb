@@ -334,6 +334,35 @@ RSpec.describe AltTextApi do
     end
   end
 
+  describe '#bulk_create' do
+    let(:csv_file) { StringIO.new("url\nhttps://example.com/img1.jpg\nhttps://example.com/img2.jpg") }
+    subject { api.bulk_create(csv_file: csv_file, email: 'test@example.com') }
+
+    before do
+      stub_request(:post, "#{base_url}/images/bulk_create")
+        .to_return(
+          status: 200,
+          body: {
+            'success' => true,
+            'rows' => 2,
+            'row_errors' => [],
+            'error' => nil
+          }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
+        )
+    end
+
+    it 'returns bulk import results' do
+      expect(subject['success']).to eq(true)
+      expect(subject['rows']).to eq(2)
+    end
+
+    it 'sends multipart form data' do
+      subject
+      expect(WebMock).to have_requested(:post, "#{base_url}/images/bulk_create")
+    end
+  end
+
   describe '#scrape_page' do
     let(:page_url) { 'https://example.com/page' }
     subject { api.scrape_page(url: page_url) }
