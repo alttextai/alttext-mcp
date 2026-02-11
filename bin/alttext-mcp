@@ -1,0 +1,263 @@
+#!/usr/bin/env ruby
+
+require "bundler/setup"
+require "mcp"
+require_relative "../lib/alttext_api"
+
+api_key = ENV["ALTTEXT_API_KEY"]
+unless api_key
+  warn "ALTTEXT_API_KEY environment variable is required"
+  exit 1
+end
+
+api = AltTextApi.new(api_key: api_key, base_url: ENV["ALTTEXT_API_BASE_URL"])
+
+def format_image(image)
+  lines = []
+  lines << "Asset ID: #{image["asset_id"]}"
+  lines << "Alt text: #{image["alt_text"] || "(none)"}"
+  lines << "URL: #{image["url"]}" if image["url"]
+
+  alt_texts = image["alt_texts"] || {}
+  if alt_texts.any?
+    lines << "Languages:"
+    alt_texts.each { |lang, text| lines << "  #{lang}: #{text}" }
+  end
+
+  lines << "Tags: #{image["tags"].join(", ")}" if image["tags"]&.any?
+  lines << "Metadata: #{JSON.generate(image["metadata"])}" if image["metadata"]&.any?
+
+  if image["created_at"].is_a?(Numeric)
+    lines << "Created: #{Time.at(image["created_at"]).utc.iso8601}"
+  end
+
+  errors = image["errors"] || {}
+  if errors.any?
+    lines << "Errors: #{errors.values.flatten.join(", ")}"
+  end
+
+  lines.join("\n")
+end
+
+def format_image_list(result)
+  pagination = result[:pagination]
+  images = result[:images]
+
+  lines = ["Found #{pagination[:total_count]} images (page #{pagination[:current_page]} of #{pagination[:total_pages]})", ""]
+
+  if images.empty?
+    lines << "No images found."
+  else
+    images.each do |image|
+      lines << "- #{image["asset_id"]}: #{image["alt_text"] || "(no alt text)"}"
+    end
+  end
+
+  lines.join("\n")
+end
+
+def format_error(error)
+  if error.is_a?(AltTextApiError)
+    parts = ["Error (#{error.status}): #{error.message}"]
+    parts << "Code: #{error.error_code}" if error.error_code
+    MCP::Tool::Response.new([{ type: "text", text: parts.join("\n") }], is_error: true)
+  else
+    MCP::Tool::Response.new([{ type: "text", text: "Error: #{error.message}" }], is_error: true)
+  end
+end
+
+server = MCP::Server.new(name: "alttext-ai", version: "1.0.0")
+
+server.define_tool(
+  name: "generate_alt_text",
+  description: "Generate AI-powered alt text for an image URL. Costs 1 credit per image.",
+  input_schema: {
+    properties: {
+      url: { type: "string", format: "uri", description: "Public URL of the image" },
+      asset_id: { type: "string", description: "Custom asset ID (default: auto-generated hash)" },
+      lang: { type: "string", description: "Comma-separated language codes (e.g. 'en', 'en,fr,es')" },
+      keywords: { type: "array", items: { type: "string" }, description: "Keywords to incorporate" },
+      negative_keywords: { type: "array", items: { type: "string" }, description: "Keywords to avoid" },
+      gpt_prompt: { type: "string", description: "Custom prompt template. Must contain {{AltText}} macro. Max 768 chars." },
+      max_chars: { type: "integer", description: "Maximum character length for the alt text" },
+      overwrite: { type: "boolean", description: "Overwrite existing alt text if image was previously processed" },
+      tags: { type: "array", items: { type: "string" }, description: "Tags for organization" },
+      metadata: { type: "object", description: "Custom metadata object" },
+    },
+    required: ["url"],
+  },
+) do |args, server_context:|
+  image = api.create_image(**args.transform_keys(&:to_sym))
+  MCP::Tool::Response.new([{ type: "text", text: "Generated alt text for #{args["url"]}:\n\n#{format_image(image)}" }])
+rescue AltTextApiError, StandardError => e
+  format_error(e)
+end
+
+server.define_tool(
+  name: "list_images",
+  description: "List images in your AltText.ai library with pagination",
+  input_schema: {
+    properties: {
+      page: { type: "integer", description: "Page number (default: 1)" },
+      limit: { type: "integer", description: "Items per page (default: 20, max: 100)" },
+      lang: { type: "string", description: "Filter alt texts by language code" },
+    },
+  },
+) do |args, server_context:|
+  result = api.list_images(**args.transform_keys(&:to_sym))
+  MCP::Tool::Response.new([{ type: "text", text: format_image_list(result) }])
+rescue AltTextApiError, StandardError => e
+  format_error(e)
+end
+
+server.define_tool(
+  name: "search_images",
+  description: "Search images by alt text content",
+  input_schema: {
+    properties: {
+      query: { type: "string", description: "Search query to match against alt text" },
+      limit: { type: "integer", description: "Max results to return (default: 20)" },
+      lang: { type: "string", description: "Filter by language code" },
+    },
+    required: ["query"],
+  },
+) do |args, server_context:|
+  result = api.search_images(**args.transform_keys(&:to_sym))
+  MCP::Tool::Response.new([{ type: "text", text: "Search results for \"#{args["query"]}\":\n\n#{format_image_list(result)}" }])
+rescue AltTextApiError, StandardError => e
+  format_error(e)
+end
+
+server.define_tool(
+  name: "get_image",
+  description: "Get details for a specific image by its asset ID",
+  input_schema: {
+    properties: {
+      asset_id: { type: "string", description: "The asset ID of the image" },
+      lang: { type: "string", description: "Filter alt texts by language code" },
+    },
+    required: ["asset_id"],
+  },
+) do |args, server_context:|
+  image = api.get_image(**args.transform_keys(&:to_sym))
+  MCP::Tool::Response.new([{ type: "text", text: format_image(image) }])
+rescue AltTextApiError, StandardError => e
+  format_error(e)
+end
+
+server.define_tool(
+  name: "update_image",
+  description: "Update alt text and/or metadata for an existing image",
+  input_schema: {
+    properties: {
+      asset_id: { type: "string", description: "The asset ID of the image to update" },
+      alt_text: { type: "string", description: "New alt text value" },
+      tags: { type: "array", items: { type: "string" }, description: "Replace tags" },
+      metadata: { type: "object", description: "Replace metadata" },
+      lang: { type: "string", description: "Language code for the alt text (default: 'en')" },
+      overwrite: { type: "boolean", description: "If false, skip language entries that already exist" },
+    },
+    required: ["asset_id"],
+  },
+) do |args, server_context:|
+  image = api.update_image(**args.transform_keys(&:to_sym))
+  MCP::Tool::Response.new([{ type: "text", text: "Updated image #{args["asset_id"]}:\n\n#{format_image(image)}" }])
+rescue AltTextApiError, StandardError => e
+  format_error(e)
+end
+
+server.define_tool(
+  name: "delete_image",
+  description: "Delete an image from your AltText.ai library",
+  input_schema: {
+    properties: {
+      asset_id: { type: "string", description: "The asset ID of the image to delete" },
+    },
+    required: ["asset_id"],
+  },
+) do |args, server_context:|
+  api.delete_image(asset_id: args["asset_id"])
+  MCP::Tool::Response.new([{ type: "text", text: "Deleted image #{args["asset_id"]}" }])
+rescue AltTextApiError, StandardError => e
+  format_error(e)
+end
+
+server.define_tool(
+  name: "get_account",
+  description: "Get your AltText.ai account info including credit balance, usage, and settings",
+  input_schema: { properties: {} },
+) do |_args, server_context:|
+  account = api.get_account
+  credits_remaining = (account["usage_limit"] || 0) - (account["usage"] || 0)
+
+  lines = [
+    "Account: #{account["name"]}",
+    "Credits: #{credits_remaining} remaining (#{account["usage"]} used of #{account["usage_limit"]})",
+    "Default language: #{account["default_lang"]}",
+  ]
+  lines << "Custom prompt: #{account["gpt_prompt"]}" if account["gpt_prompt"]
+  lines << "Max chars: #{account["max_chars"]}" if account["max_chars"]
+  lines << "Webhook: #{account["webhook_url"]}" if account["webhook_url"]
+  lines << "Notification email: #{account["notification_email"]}" if account["notification_email"]
+  lines << "Whitelabel: #{account["whitelabel"]}"
+  lines << "No quotes: #{account["no_quotes"]}"
+  lines << "Ending period: true" if account["ending_period"]
+
+  MCP::Tool::Response.new([{ type: "text", text: lines.join("\n") }])
+rescue AltTextApiError, StandardError => e
+  format_error(e)
+end
+
+server.define_tool(
+  name: "scrape_page",
+  description: "Find images on a web page and queue alt-text generation jobs. Images are processed asynchronously.",
+  input_schema: {
+    properties: {
+      url: { type: "string", format: "uri", description: "URL of the web page to scrape" },
+      html: { type: "string", description: "Optional HTML override (if omitted, server fetches the page)" },
+      include_existing: { type: "boolean", description: "Include images that already have alt text" },
+      lang: { type: "string", description: "Language codes for generation" },
+      keywords: { type: "array", items: { type: "string" }, description: "Keywords to incorporate" },
+      negative_keywords: { type: "array", items: { type: "string" }, description: "Keywords to avoid" },
+      gpt_prompt: { type: "string", description: "Custom prompt override" },
+      max_chars: { type: "integer", description: "Maximum character length" },
+      overwrite: { type: "boolean", description: "Overwrite existing alt text" },
+    },
+    required: ["url"],
+  },
+) do |args, server_context:|
+  result = api.scrape_page(**args.transform_keys(&:to_sym))
+  scraped = result["scraped_images"] || []
+
+  lines = [
+    "Scraped #{args["url"]}",
+    "Images found: #{scraped.length}",
+    "Images queued for processing: #{result["total_processed"]}",
+    "",
+  ]
+
+  if scraped.any?
+    lines << "Discovered images:"
+    scraped.each do |img|
+      status = img["skip_reason"] ? "skipped: #{img["skip_reason"]}" : "queued"
+      lines << "  - #{img["src"] || "(no src)"} [#{status}]"
+    end
+  end
+
+  errors = result["errors"] || {}
+  if errors.any?
+    lines << "\nErrors: #{errors.values.flatten.join(", ")}"
+  end
+
+  if result["total_processed"]&.positive?
+    lines << "\nNote: Images are being processed asynchronously. Use list_images or get_image to check results."
+  end
+
+  MCP::Tool::Response.new([{ type: "text", text: lines.join("\n") }])
+rescue AltTextApiError, StandardError => e
+  format_error(e)
+end
+
+transport = MCP::Server::Transports::StdioTransport.new(server)
+warn "AltText.ai MCP Server running on stdio"
+transport.open
