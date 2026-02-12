@@ -41,27 +41,58 @@ Add the server to your MCP client configuration:
 
 ## Tools
 
+### Account Management
+| Tool | Description |
+|------|-------------|
+| `get_account` | Check your credit balance, usage, and account settings. |
+| `update_account` | Update account name, webhook URL, or notification email. |
+
+### Generate Alt Text
 | Tool | Description |
 |------|-------------|
 | `generate_alt_text` | Generate alt text for an image URL. Supports multilingual output, custom prompts, keywords, and character limits. Costs 1 credit. |
-| `scrape_page` | Scan a web page, find images missing alt text, and queue generation. Results are async -- use `list_images` to check progress. |
+| `generate_alt_text_from_file` | Generate alt text from a local image file. Automatically base64-encodes and uploads. Costs 1 credit. |
+| `translate_image` | Add alt text in a new language for an existing image (by asset_id). Costs 1 credit. |
+
+### Manage Image Library
+| Tool | Description |
+|------|-------------|
 | `list_images` | List images in your library with pagination. |
 | `search_images` | Search your image library by alt text content. |
 | `get_image` | Get details for a specific image by asset ID. |
 | `update_image` | Update alt text, tags, or metadata for an image. |
 | `delete_image` | Delete an image from your library. |
-| `get_account` | Check your credit balance, usage, and account settings. |
+
+### Bulk Operations
+| Tool | Description |
+|------|-------------|
+| `bulk_create` | Bulk generate alt text from a CSV file with image URLs and optional metadata. |
+| `scrape_page` | Scan a web page, find images missing alt text, and queue generation. Results are async -- use `list_images` to check progress. |
 
 ## Example Prompts
 
 Once configured, just ask your AI assistant:
 
-- "Generate alt text for https://example.com/photo.jpg"
-- "Generate alt text in French and Spanish for this image"
-- "Scan https://example.com for images missing alt text"
+### Account & Credits
 - "How many credits do I have left?"
+- "Update my webhook URL to https://example.com/webhook"
+
+### Generate Alt Text
+- "Generate alt text for https://example.com/photo.jpg"
+- "Generate alt text for this image" (with local file)
+- "Generate alt text in French and Spanish for this image"
+- "Translate image abc123 to German"
+
+### Manage Library
 - "Search my images for 'product photo'"
+- "List my images"
+- "Get details for image abc123"
 - "Update the alt text for asset abc123"
+- "Delete image xyz789"
+
+### Bulk Operations
+- "Scan https://example.com for images missing alt text"
+- "Process this CSV file of image URLs" (bulk_create)
 
 ## Environment Variables
 

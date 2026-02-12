@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'base64'
 require 'webmock/rspec'
 require_relative '../lib/alttext_api'
 

@@ -91,6 +91,53 @@ RSpec.describe AltTextApi do
     end
   end
 
+  describe '#create_image_from_raw' do
+    let(:raw_data) { Base64.strict_encode64('fake-image-bytes') }
+    subject { api.create_image_from_raw(raw: raw_data) }
+
+    before do
+      stub_request(:post, "#{base_url}/images")
+        .to_return(
+          status: 200,
+          body: { 'asset_id' => 'raw123', 'alt_text' => 'A raw image' }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
+        )
+    end
+
+    it 'returns image data with alt text' do
+      expect(subject).to include('asset_id' => 'raw123', 'alt_text' => 'A raw image')
+    end
+
+    it 'sends raw in the image envelope' do
+      subject
+      expect(WebMock).to have_requested(:post, "#{base_url}/images")
+        .with(body: hash_including('image' => { 'raw' => raw_data }, 'async' => false))
+    end
+
+    context 'with optional parameters' do
+      subject do
+        api.create_image_from_raw(
+          raw: raw_data,
+          lang: 'en',
+          keywords: ['photo'],
+          tags: ['uploaded']
+        )
+      end
+
+      it 'includes all parameters in the request body' do
+        subject
+        expect(WebMock).to(have_requested(:post, "#{base_url}/images")
+          .with do |req|
+            body = JSON.parse(req.body)
+            body['lang'] == 'en' &&
+              body['keywords'] == ['photo'] &&
+              body['image']['tags'] == ['uploaded'] &&
+              body['image']['raw'] == raw_data
+          end)
+      end
+    end
+  end
+
   describe '#list_images' do
     subject { api.list_images(page: 2, limit: 10) }
 
@@ -185,6 +232,71 @@ RSpec.describe AltTextApi do
     end
   end
 
+  describe '#update_account' do
+    subject { api.update_account(name: 'New Name', webhook_url: 'https://example.com/webhook') }
+
+    before do
+      stub_request(:patch, "#{base_url}/account")
+        .to_return(
+          status: 200,
+          body: { 'name' => 'New Name', 'webhook_url' => 'https://example.com/webhook' }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
+        )
+    end
+
+    it 'returns updated account data' do
+      expect(subject).to include('name' => 'New Name', 'webhook_url' => 'https://example.com/webhook')
+    end
+
+    it 'sends PATCH with account envelope' do
+      subject
+      expect(WebMock).to have_requested(:patch, "#{base_url}/account")
+        .with(body: hash_including('account' => include('name' => 'New Name')))
+    end
+
+    context 'with partial updates' do
+      subject { api.update_account(notification_email: 'test@example.com') }
+
+      it 'only sends provided fields' do
+        subject
+        expect(WebMock).to(have_requested(:patch, "#{base_url}/account")
+          .with do |req|
+            body = JSON.parse(req.body)
+            body['account'].key?('notification_email') && !body['account'].key?('name')
+          end)
+      end
+    end
+  end
+
+  describe '#translate_image' do
+    subject { api.translate_image(asset_id: 'abc123', lang: 'de') }
+
+    before do
+      stub_request(:post, "#{base_url}/images")
+        .to_return(
+          status: 200,
+          body: {
+            'asset_id' => 'abc123',
+            'alt_texts' => [
+              { 'lang' => 'en', 'alt_text' => 'A photo' },
+              { 'lang' => 'de', 'alt_text' => 'Ein Foto' }
+            ]
+          }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
+        )
+    end
+
+    it 'returns image data with translations' do
+      expect(subject['alt_texts'].length).to eq(2)
+    end
+
+    it 'sends asset_id and lang without a URL' do
+      subject
+      expect(WebMock).to have_requested(:post, "#{base_url}/images")
+        .with(body: { 'image' => { 'asset_id' => 'abc123' }, 'lang' => 'de', 'async' => false }.to_json)
+    end
+  end
+
   describe '#update_image' do
     subject { api.update_image(asset_id: 'abc123', alt_text: 'Updated text') }
 
@@ -219,6 +331,35 @@ RSpec.describe AltTextApi do
     it 'sends DELETE request' do
       subject
       expect(WebMock).to have_requested(:delete, "#{base_url}/images/abc123")
+    end
+  end
+
+  describe '#bulk_create' do
+    let(:csv_file) { StringIO.new("url\nhttps://example.com/img1.jpg\nhttps://example.com/img2.jpg") }
+    subject { api.bulk_create(csv_file: csv_file, email: 'test@example.com') }
+
+    before do
+      stub_request(:post, "#{base_url}/images/bulk_create")
+        .to_return(
+          status: 200,
+          body: {
+            'success' => true,
+            'rows' => 2,
+            'row_errors' => [],
+            'error' => nil
+          }.to_json,
+          headers: { 'Content-Type' => 'application/json' }
+        )
+    end
+
+    it 'returns bulk import results' do
+      expect(subject['success']).to eq(true)
+      expect(subject['rows']).to eq(2)
+    end
+
+    it 'sends multipart form data' do
+      subject
+      expect(WebMock).to have_requested(:post, "#{base_url}/images/bulk_create")
     end
   end
 

@@ -4,6 +4,7 @@ source 'https://rubygems.org'
 
 ruby '>= 3.2'
 
+gem 'base64'
 gem 'mcp', '~> 0.6'
 
 group :development, :test do
