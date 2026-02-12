@@ -1,6 +1,16 @@
+# Dependencies
 .bundle
 vendor
-.DS_Store
+
+# Environment
 .env
 .env.*
+
+# MCP client config (contains API keys)
 .mcp.json
+
+# OS
+.DS_Store
+
+# Coverage
+coverage
