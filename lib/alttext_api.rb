@@ -4,7 +4,6 @@ require 'net/http'
 require 'uri'
 require 'json'
 
-# rubocop:disable Metrics/ClassLength
 class AltTextApiError < StandardError
   attr_reader :status, :error_code, :errors
 
@@ -35,86 +34,32 @@ class AltTextApi
   end
 
   def update_account(name: nil, webhook_url: nil, notification_email: nil)
-    account_envelope = {}
-    account_envelope[:name] = name if name
-    account_envelope[:webhook_url] = webhook_url if webhook_url
-    account_envelope[:notification_email] = notification_email if notification_email
-
-    body = { account: account_envelope }
-
-    data, = request(:patch, '/account', body: body)
+    envelope = { name: name, webhook_url: webhook_url, notification_email: notification_email }.compact
+    data, = request(:patch, '/account', body: { account: envelope })
     data
   end
 
   def list_images(page: nil, limit: nil, lang: nil)
-    query = {}
-    query[:page] = page if page
-    query[:limit] = limit if limit
-    query[:lang] = lang if lang
-
-    data, headers = request(:get, '/images', query: query)
-    {
-      images: data['images'],
-      pagination: parse_pagination(headers)
-    }
+    data, headers = request(:get, '/images', query: { page: page, limit: limit, lang: lang }.compact)
+    { images: data['images'], pagination: parse_pagination(headers) }
   end
 
   def search_images(query:, limit: nil, lang: nil)
-    params = { q: query }
-    params[:limit] = limit if limit
-    params[:lang] = lang if lang
-
-    data, headers = request(:get, '/images/search', query: params)
-    {
-      images: data['images'],
-      pagination: parse_pagination(headers)
-    }
+    data, headers = request(:get, '/images/search', query: { q: query, limit: limit, lang: lang }.compact)
+    { images: data['images'], pagination: parse_pagination(headers) }
   end
 
   def get_image(asset_id:, lang: nil)
-    query = {}
-    query[:lang] = lang if lang
-
-    data, = request(:get, "/images/#{URI.encode_uri_component(asset_id)}", query: query)
+    data, = request(:get, "/images/#{URI.encode_uri_component(asset_id)}", query: { lang: lang }.compact)
     data
   end
 
-  def create_image(url:, asset_id: nil, lang: nil, keywords: nil, negative_keywords: nil,
-                   gpt_prompt: nil, max_chars: nil, overwrite: nil, tags: nil, metadata: nil)
-    image_envelope = { url: url }
-    image_envelope[:asset_id] = asset_id if asset_id
-    image_envelope[:tags] = tags if tags
-    image_envelope[:metadata] = metadata if metadata
-
-    body = { image: image_envelope, async: false }
-    body[:lang] = lang if lang
-    body[:keywords] = keywords if keywords
-    body[:negative_keywords] = negative_keywords if negative_keywords
-    body[:gpt_prompt] = gpt_prompt if gpt_prompt
-    body[:max_chars] = max_chars if max_chars
-    body[:overwrite] = overwrite unless overwrite.nil?
-
-    data, = request(:post, '/images', body: body)
-    data
+  def create_image(url:, **)
+    generate_image({ url: url }, **)
   end
 
-  def create_image_from_raw(raw:, asset_id: nil, lang: nil, keywords: nil, negative_keywords: nil,
-                            gpt_prompt: nil, max_chars: nil, overwrite: nil, tags: nil, metadata: nil)
-    image_envelope = { raw: raw }
-    image_envelope[:asset_id] = asset_id if asset_id
-    image_envelope[:tags] = tags if tags
-    image_envelope[:metadata] = metadata if metadata
-
-    body = { image: image_envelope, async: false }
-    body[:lang] = lang if lang
-    body[:keywords] = keywords if keywords
-    body[:negative_keywords] = negative_keywords if negative_keywords
-    body[:gpt_prompt] = gpt_prompt if gpt_prompt
-    body[:max_chars] = max_chars if max_chars
-    body[:overwrite] = overwrite unless overwrite.nil?
-
-    data, = request(:post, '/images', body: body)
-    data
+  def create_image_from_raw(raw:, **)
+    generate_image({ raw: raw }, **)
   end
 
   def translate_image(asset_id:, lang:)
@@ -145,35 +90,15 @@ class AltTextApi
 
   def bulk_create(csv_file:, email: nil)
     uri = URI("#{@base_url}/images/bulk_create")
-
     req = Net::HTTP::Post.new(uri)
     req['X-API-Key'] = @api_key
     req['Accept'] = 'application/json'
-
     form_data = [['file', csv_file]]
     form_data << ['email', email] if email
-
     req.set_form(form_data, 'multipart/form-data')
 
-    retried = false
-    begin
-      ensure_connected
-      response = @http.request(req)
-      data, = handle_response(response)
-      data
-    rescue Errno::EPIPE, IOError, Errno::ECONNRESET => e
-      begin
-        @http.finish
-      rescue StandardError
-        nil
-      end
-      raise connection_error(e) if retried
-
-      retried = true
-      retry
-    rescue Errno::ECONNREFUSED, Net::OpenTimeout, Net::ReadTimeout, Net::WriteTimeout, SocketError => e
-      raise connection_error(e)
-    end
+    data, = with_retry { handle_response(@http.request(req)) }
+    data
   end
 
   def scrape_page(url:, html: nil, include_existing: nil, lang: nil, keywords: nil,
@@ -196,16 +121,37 @@ class AltTextApi
 
   private
 
+  def generate_image(image_source, asset_id: nil, lang: nil, keywords: nil, negative_keywords: nil,
+                     gpt_prompt: nil, max_chars: nil, overwrite: nil, tags: nil, metadata: nil)
+    image_envelope = image_source
+    image_envelope[:asset_id] = asset_id if asset_id
+    image_envelope[:tags] = tags if tags
+    image_envelope[:metadata] = metadata if metadata
+
+    body = { image: image_envelope, async: false }
+    body[:lang] = lang if lang
+    body[:keywords] = keywords if keywords
+    body[:negative_keywords] = negative_keywords if negative_keywords
+    body[:gpt_prompt] = gpt_prompt if gpt_prompt
+    body[:max_chars] = max_chars if max_chars
+    body[:overwrite] = overwrite unless overwrite.nil?
+
+    data, = request(:post, '/images', body: body)
+    data
+  end
+
   def request(method, path, body: nil, query: nil)
     uri = URI("#{@base_url}#{path}")
     uri.query = URI.encode_www_form(query.compact) if query&.any?
-
     req = build_request(method, uri, body)
+    with_retry { handle_response(@http.request(req)) }
+  end
+
+  def with_retry
     retried = false
     begin
       ensure_connected
-      response = @http.request(req)
-      handle_response(response)
+      yield
     rescue Errno::EPIPE, IOError, Errno::ECONNRESET => e
       begin
         @http.finish
@@ -290,4 +236,3 @@ class AltTextApi
     )
   end
 end
-# rubocop:enable Metrics/ClassLength

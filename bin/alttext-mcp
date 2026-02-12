@@ -47,6 +47,16 @@ def scrape_options_schema
   }
 end
 
+MAX_FILE_SIZE = 10 * 1024 * 1024 # 10 MB
+
+def validate_file!(path)
+  raise StandardError, "File not found: #{path}" unless File.exist?(path)
+  raise StandardError, "Not a regular file: #{path}" unless File.file?(path)
+
+  size = File.size(path)
+  raise StandardError, "File too large (#{size} bytes, max #{MAX_FILE_SIZE})" if size > MAX_FILE_SIZE
+end
+
 server = MCP::Server.new(name: 'alttext-ai', version: '1.0.0')
 
 server.define_tool(
@@ -76,6 +86,7 @@ server.define_tool(
   }
 ) do |file_path:, **args|
   args = api_args(args)
+  validate_file!(file_path)
   raw = Base64.strict_encode64(File.binread(file_path))
   image = api.create_image_from_raw(raw: raw, **args)
   MCP::Tool::Response.new([{ type: 'text', text: "Generated alt text for #{File.basename(file_path)}:\n\n#{Formatters.format_image(image)}" }])
@@ -247,11 +258,8 @@ server.define_tool(
   }
 ) do |csv_file:, email: nil, **args|
   args = api_args(args)
-  return Formatters.error_response(StandardError.new("CSV file not found: #{csv_file}")) unless File.exist?(csv_file)
-
-  file = File.open(csv_file, 'rb')
-  result = api.bulk_create(csv_file: file, email: email, **args)
-  file.close
+  validate_file!(csv_file)
+  result = File.open(csv_file, 'rb') { |file| api.bulk_create(csv_file: file, email: email, **args) }
 
   rows = result['rows'] || 0
   errors = result['row_errors'] || []
@@ -259,7 +267,7 @@ server.define_tool(
 
   response_text = "Bulk import processed #{rows} rows"
   response_text += "\n\nErrors:\n#{errors.join("\n")}" if errors.any?
-  response_text += "\n\nFile error: #{error_msg}" if error_msg.present?
+  response_text += "\n\nFile error: #{error_msg}" if error_msg && !error_msg.empty?
 
   MCP::Tool::Response.new([{ type: 'text', text: response_text }])
 rescue StandardError => e
