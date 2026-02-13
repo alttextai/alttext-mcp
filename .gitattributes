@@ -1,0 +1,2 @@
+# Exclude config files from GitHub language statistics
+eslint.config.js linguist-vendored
