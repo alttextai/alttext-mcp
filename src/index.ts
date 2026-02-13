@@ -138,8 +138,8 @@ server.registerTool(
     description: "Update your AltText.ai account settings (name, webhook URL, notification email)",
     inputSchema: {
       name: z.string().max(256).optional().describe("Account name"),
-      webhook_url: z.string().url().optional().describe("Webhook URL for processing notifications"),
-      notification_email: z.string().email().optional().describe("Email address for notifications"),
+      webhook_url: z.url().optional().describe("Webhook URL for processing notifications"),
+      notification_email: z.email().optional().describe("Email address for notifications"),
     },
   },
   async ({ name, webhook_url, notification_email }) => {
@@ -167,7 +167,7 @@ server.registerTool(
     description:
       "Generate AI-powered alt text for an image URL. Returns the result synchronously (may take a few seconds). Costs 1 credit per image.",
     inputSchema: {
-      url: z.string().url().describe("Public URL of the image"),
+      url: z.url().describe("Public URL of the image"),
       ...generationOptionsSchema,
     },
   },
@@ -249,7 +249,7 @@ server.registerTool(
         .optional()
         .describe("Items per page (default: 20, max: 100)"),
       lang: z.string().max(64).optional().describe("Filter alt texts by language code"),
-      url: z.string().url().optional().describe("Filter images by exact URL match"),
+      url: z.url().optional().describe("Filter images by exact URL match"),
       sort: z
         .enum(["id", "created_at", "asset_id"])
         .optional()
@@ -324,7 +324,7 @@ server.registerTool(
       alt_text: z.string().max(1000).optional().describe("New alt text value"),
       tags: z.array(z.string().max(128)).max(50).optional().describe("Replace tags"),
       metadata: z
-        .record(z.string().max(256))
+        .record(z.string(), z.string().max(256))
         .optional()
         .describe("Replace metadata (string key-value pairs)"),
       lang: z
@@ -389,7 +389,7 @@ server.registerTool(
         .string()
         .max(4096)
         .describe("Path to CSV file with image URLs and optional metadata"),
-      email: z.string().email().optional().describe("Email for completion notification"),
+      email: z.email().optional().describe("Email for completion notification"),
     },
   },
   async ({ csv_file, email }) => {
@@ -421,7 +421,7 @@ server.registerTool(
     description:
       "Find images on a web page and queue alt-text generation jobs. Images are processed asynchronously.",
     inputSchema: {
-      url: z.string().url().describe("URL of the web page to scrape"),
+      url: z.url().describe("URL of the web page to scrape"),
       html: z
         .string()
         .max(500_000)

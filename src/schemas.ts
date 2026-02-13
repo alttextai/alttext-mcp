@@ -34,7 +34,7 @@ export const generationOptionsSchema = {
     .describe("Overwrite existing alt text if image was previously processed"),
   tags: z.array(z.string().max(128)).max(50).optional().describe("Tags for organization"),
   metadata: z
-    .record(z.string().max(256))
+    .record(z.string(), z.string().max(256))
     .optional()
     .describe("Custom metadata (string key-value pairs)"),
 } as const;
