@@ -6,13 +6,7 @@ Works with Claude Desktop, Claude Code, Cursor, Windsurf, and any MCP-compatible
 
 ## Setup
 
-**Requirements:** Ruby 3.2+ and an [AltText.ai API key](https://alttext.ai/account/api)
-
-```sh
-git clone https://github.com/alttextai/alttext-mcp.git
-cd alttext-mcp
-bundle install
-```
+**Requirements:** Node.js 18+ and an [AltText.ai API key](https://alttext.ai/account/api)
 
 Add the server to your MCP client configuration:
 
@@ -20,8 +14,8 @@ Add the server to your MCP client configuration:
 {
   "mcpServers": {
     "alttext-ai": {
-      "command": "ruby",
-      "args": ["/absolute/path/to/alttext-mcp/bin/alttext-mcp"],
+      "command": "npx",
+      "args": ["-y", "@alttextai/alttext-mcp"],
       "env": {
         "ALTTEXT_API_KEY": "your-api-key"
       }
@@ -104,11 +98,13 @@ Once configured, just ask your AI assistant:
 ## Development
 
 ```sh
-bundle install
-bundle exec rspec
+npm install
+npm run build
+npm test
+npm run lint
 ```
 
-Tests use [WebMock](https://github.com/bblimke/webmock) to stub HTTP requests -- no API key or network access needed.
+Tests use mocked `fetch` calls -- no API key or network access needed.
 
 ## License
 

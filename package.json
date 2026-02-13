@@ -1,0 +1,60 @@
+{
+  "name": "@alttextai/alttext-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for AltText.ai — generate alt text, manage image libraries, and audit web pages for accessibility",
+  "license": "MIT",
+  "author": "AltText.ai (https://alttext.ai)",
+  "homepage": "https://alttext.ai",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "alt-text",
+    "accessibility",
+    "a11y",
+    "image",
+    "ai",
+    "alttext"
+  ],
+  "bugs": "https://github.com/alttextai/alttext-mcp/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/alttextai/alttext-mcp.git"
+  },
+  "type": "module",
+  "bin": {
+    "alttext-mcp": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc && shx chmod +x dist/*.js",
+    "prepare": "npm run build",
+    "lint": "eslint src/ test/",
+    "lint:fix": "eslint src/ test/ --fix",
+    "format": "prettier --write 'src/**/*.ts' 'test/**/*.ts'",
+    "format:check": "prettier --check 'src/**/*.ts' 'test/**/*.ts'",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run lint && npm run format:check && npm run build && npm test",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.2",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^22",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^10.0.0",
+    "prettier": "^3.4.0",
+    "shx": "^0.3.4",
+    "typescript": "^5.8.2",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

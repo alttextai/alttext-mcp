@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "alttext-ai": {
-      "command": "ruby",
-      "args": ["/absolute/path/to/alttext-mcp/bin/alttext-mcp"],
+      "command": "npx",
+      "args": ["-y", "@alttextai/alttext-mcp"],
       "env": {
         "ALTTEXT_API_KEY": "your-api-key-here"
       }
