@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createRequire } from "node:module";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -9,6 +10,9 @@ import { AltTextApi, AltTextApiError } from "./alttext-api.js";
 import { formatAccount, formatImage, formatImageList, formatScrapeResult } from "./formatters.js";
 import { generationOptionsSchema, scrapeOptionsSchema } from "./schemas.js";
 import type { GenerateOptions } from "./types.js";
+
+const require = createRequire(import.meta.url);
+const { version } = require("../package.json") as { version: string };
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -34,7 +38,7 @@ if (!apiKey) {
 }
 
 const api = new AltTextApi(apiKey, process.env["ALTTEXT_API_BASE_URL"]);
-const server = new McpServer({ name: "alttext-ai", version: "1.0.0" });
+const server = new McpServer({ name: "alttext-ai", version });
 
 // -- Helpers --
 
