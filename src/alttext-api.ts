@@ -64,12 +64,22 @@ export class AltTextApi {
   }
 
   async listImages(
-    opts: { page?: number; limit?: number; lang?: string } = {},
+    opts: {
+      page?: number;
+      limit?: number;
+      lang?: string;
+      url?: string;
+      sort?: string;
+      direction?: string;
+    } = {},
   ): Promise<ImageListResult> {
     const query = this.buildQuery({
       page: opts.page,
       limit: opts.limit,
       lang: opts.lang,
+      url: opts.url,
+      sort: opts.sort,
+      direction: opts.direction,
     });
 
     const { data, response } = await this.request("GET", "/images", { query });

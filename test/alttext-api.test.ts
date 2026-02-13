@@ -169,6 +169,20 @@ describe("AltTextApi", () => {
         totalCount: 0,
       });
     });
+
+    it("passes url, sort, and direction as query params", async () => {
+      fetchMock.mockResolvedValueOnce(jsonResponse({ images: [] }));
+      await api.listImages({
+        url: "https://example.com/photo.jpg",
+        sort: "created_at",
+        direction: "ASC",
+      });
+
+      const [requestUrl] = fetchMock.mock.calls[0] as [string];
+      expect(requestUrl).toContain("url=https");
+      expect(requestUrl).toContain("sort=created_at");
+      expect(requestUrl).toContain("direction=ASC");
+    });
   });
 
   describe("searchImages", () => {

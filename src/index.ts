@@ -247,11 +247,17 @@ server.registerTool(
         .optional()
         .describe("Items per page (default: 20, max: 100)"),
       lang: z.string().max(64).optional().describe("Filter alt texts by language code"),
+      url: z.string().url().optional().describe("Filter images by exact URL match"),
+      sort: z
+        .enum(["id", "created_at", "asset_id"])
+        .optional()
+        .describe("Sort column (default: id)"),
+      direction: z.enum(["ASC", "DESC"]).optional().describe("Sort direction (default: DESC)"),
     },
   },
-  async ({ page, limit, lang }) => {
+  async ({ page, limit, lang, url, sort, direction }) => {
     try {
-      const result = await api.listImages({ page, limit, lang });
+      const result = await api.listImages({ page, limit, lang, url, sort, direction });
       return textContent(formatImageList(result));
     } catch (err) {
       return errorContent(err);

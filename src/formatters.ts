@@ -29,6 +29,10 @@ export function formatImage(image: ImageRecord): string {
     lines.push(`Created: ${new Date(image.created_at * 1000).toISOString()}`);
   }
 
+  if (image.error_code) {
+    lines.push(`Error code: ${image.error_code}`);
+  }
+
   if (image.errors && Object.keys(image.errors).length > 0) {
     lines.push(`Errors: ${Object.values(image.errors).flat().join(", ")}`);
   }
@@ -91,7 +95,11 @@ export function formatScrapeResult(result: ScrapeResult, url: string): string {
     lines.push("Discovered images:");
     for (const img of scraped) {
       const status = img.skip_reason ? `skipped: ${img.skip_reason}` : "queued";
-      lines.push(`  - ${img.src ?? "(no src)"} [${status}]`);
+      const dims =
+        img.width !== undefined && img.height !== undefined
+          ? ` (${String(img.width)}x${String(img.height)})`
+          : "";
+      lines.push(`  - ${img.src ?? "(no src)"}${dims} [${status}]`);
     }
   }
 

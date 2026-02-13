@@ -54,6 +54,18 @@ describe("formatImage", () => {
     };
     expect(formatImage(image)).toContain("Errors: is unreachable");
   });
+
+  it("includes error_code when present", () => {
+    const image: ImageRecord = {
+      asset_id: "err2",
+      alt_text: null,
+      error_code: "download_failed",
+      errors: { url: ["could not download"] },
+    };
+    const result = formatImage(image);
+    expect(result).toContain("Error code: download_failed");
+    expect(result).toContain("Errors: could not download");
+  });
 });
 
 describe("formatImageList", () => {
@@ -137,6 +149,15 @@ describe("formatScrapeResult", () => {
     expect(output).toContain("- img1.jpg [queued]");
     expect(output).toContain("- img2.jpg [skipped: already processed]");
     expect(output).toContain("Images are being processed asynchronously");
+  });
+
+  it("includes image dimensions when available", () => {
+    const result: ScrapeResult = {
+      scraped_images: [{ src: "img1.jpg", width: 800, height: 600 }],
+      total_processed: 1,
+    };
+    const output = formatScrapeResult(result, "https://example.com/page");
+    expect(output).toContain("- img1.jpg (800x600) [queued]");
   });
 
   it("shows zero counts with no images", () => {

@@ -16,11 +16,12 @@ export interface ImageListResult {
 export interface ImageRecord {
   readonly asset_id: string;
   readonly alt_text?: string | null;
-  readonly url?: string;
+  readonly url?: string | null;
   readonly alt_texts?: Readonly<Record<string, string>>;
   readonly tags?: readonly string[];
   readonly metadata?: Readonly<Record<string, unknown>>;
   readonly created_at?: number;
+  readonly error_code?: string | null;
   readonly errors?: Readonly<Record<string, readonly string[]>>;
 }
 
@@ -37,10 +38,13 @@ export interface AccountRecord {
   readonly whitelabel: boolean;
   readonly no_quotes: boolean;
   readonly ending_period?: boolean;
+  readonly remove_symbols?: boolean;
+  readonly subscription?: unknown;
 }
 
 /** Result from the scrape_page endpoint. */
 export interface ScrapeResult {
+  readonly url?: string;
   readonly scraped_images: readonly ScrapedImage[];
   readonly total_processed: number;
   readonly errors?: Readonly<Record<string, readonly string[]>>;
@@ -49,6 +53,9 @@ export interface ScrapeResult {
 /** A single image discovered during page scraping. */
 export interface ScrapedImage {
   readonly src?: string;
+  readonly alt?: string;
+  readonly width?: number;
+  readonly height?: number;
   readonly skip_reason?: string;
 }
 
