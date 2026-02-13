@@ -195,8 +195,8 @@ server.registerTool(
   },
   async ({ file_path, ...rest }) => {
     try {
-      await resolveAndValidateFile(file_path, ALLOWED_IMAGE_EXTENSIONS);
-      const raw = (await readFile(file_path)).toString("base64");
+      const resolved = await resolveAndValidateFile(file_path, ALLOWED_IMAGE_EXTENSIONS);
+      const raw = (await readFile(resolved)).toString("base64");
       const opts = toGenerateOptions(rest);
       const image = await api.createImageFromRaw({ raw, ...opts });
       return textContent(`Generated alt text for ${basename(file_path)}:\n\n${formatImage(image)}`);
@@ -394,8 +394,8 @@ server.registerTool(
   },
   async ({ csv_file, email }) => {
     try {
-      await resolveAndValidateFile(csv_file);
-      const fileBuffer = await readFile(csv_file);
+      const resolved = await resolveAndValidateFile(csv_file);
+      const fileBuffer = await readFile(resolved);
       const blob = new Blob([fileBuffer], { type: "text/csv" });
       const result = await api.bulkCreate({ csvFile: blob, email });
 

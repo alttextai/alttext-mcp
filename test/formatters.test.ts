@@ -116,6 +116,20 @@ describe("formatAccount", () => {
     expect(result).toContain("Webhook: https://example.com/hook");
     expect(result).toContain("Notification email: test@example.com");
     expect(result).toContain("Ending period: true");
+    expect(result).not.toContain("Remove symbols:");
+  });
+
+  it("includes remove_symbols when true", () => {
+    const account: AccountRecord = {
+      name: "Symbols",
+      usage: 0,
+      usage_limit: 100,
+      default_lang: "en",
+      whitelabel: false,
+      no_quotes: false,
+      remove_symbols: true,
+    };
+    expect(formatAccount(account)).toContain("Remove symbols: true");
   });
 
   it("omits optional fields when absent", () => {

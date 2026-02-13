@@ -76,6 +76,7 @@ export function formatAccount(account: AccountRecord): string {
   lines.push(`Whitelabel: ${String(account.whitelabel)}`);
   lines.push(`No quotes: ${String(account.no_quotes)}`);
   if (account.ending_period) lines.push("Ending period: true");
+  if (account.remove_symbols) lines.push("Remove symbols: true");
 
   return lines.join("\n");
 }
