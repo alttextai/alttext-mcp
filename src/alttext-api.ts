@@ -52,10 +52,11 @@ export class AltTextApi {
 
   async updateAccount(opts: UpdateAccountOptions): Promise<AccountRecord> {
     const envelope: Record<string, unknown> = {};
-    if (opts.name !== undefined) envelope["name"] = opts.name;
-    if (opts.webhookUrl !== undefined) envelope["webhook_url"] = opts.webhookUrl;
-    if (opts.notificationEmail !== undefined)
-      envelope["notification_email"] = opts.notificationEmail;
+    assignDefined(envelope, [
+      ["name", opts.name],
+      ["webhook_url", opts.webhookUrl],
+      ["notification_email", opts.notificationEmail],
+    ]);
 
     const { data } = await this.request("PATCH", "/account", {
       body: { account: envelope },
@@ -83,11 +84,7 @@ export class AltTextApi {
     });
 
     const { data, response } = await this.request("GET", "/images", { query });
-    const typed = data as unknown as { images: ImageRecord[] };
-    return {
-      images: typed.images,
-      pagination: parsePagination(response),
-    };
+    return this.parseImageList(data, response);
   }
 
   async searchImages(opts: {
@@ -102,11 +99,7 @@ export class AltTextApi {
     });
 
     const { data, response } = await this.request("GET", "/images/search", { query });
-    const typed = data as unknown as { images: ImageRecord[] };
-    return {
-      images: typed.images,
-      pagination: parsePagination(response),
-    };
+    return this.parseImageList(data, response);
   }
 
   async getImage(opts: { assetId: string; lang?: string }): Promise<ImageRecord> {
@@ -137,13 +130,17 @@ export class AltTextApi {
 
   async updateImage(opts: UpdateImageOptions): Promise<ImageRecord> {
     const imageEnvelope: Record<string, unknown> = {};
-    if (opts.altText !== undefined) imageEnvelope["alt_text"] = opts.altText;
-    if (opts.tags !== undefined) imageEnvelope["tags"] = opts.tags;
-    if (opts.metadata !== undefined) imageEnvelope["metadata"] = opts.metadata;
+    assignDefined(imageEnvelope, [
+      ["alt_text", opts.altText],
+      ["tags", opts.tags],
+      ["metadata", opts.metadata],
+    ]);
 
     const body: Record<string, unknown> = { image: imageEnvelope };
-    if (opts.lang !== undefined) body["lang"] = opts.lang;
-    if (opts.overwrite !== undefined) body["overwrite"] = opts.overwrite;
+    assignDefined(body, [
+      ["lang", opts.lang],
+      ["overwrite", opts.overwrite],
+    ]);
 
     const { data } = await this.request("PATCH", `/images/${encodeURIComponent(opts.assetId)}`, {
       body,
@@ -178,16 +175,18 @@ export class AltTextApi {
 
   async scrapePage(opts: ScrapePageOptions): Promise<ScrapeResult> {
     const pageScrapeEnvelope: Record<string, unknown> = { url: opts.url };
-    if (opts.html !== undefined) pageScrapeEnvelope["html"] = opts.html;
+    assignDefined(pageScrapeEnvelope, [["html", opts.html]]);
 
     const body: Record<string, unknown> = { page_scrape: pageScrapeEnvelope };
-    if (opts.includeExisting !== undefined) body["include_existing"] = opts.includeExisting;
-    if (opts.lang !== undefined) body["lang"] = opts.lang;
-    if (opts.keywords !== undefined) body["keywords"] = opts.keywords;
-    if (opts.negativeKeywords !== undefined) body["negative_keywords"] = opts.negativeKeywords;
-    if (opts.gptPrompt !== undefined) body["gpt_prompt"] = opts.gptPrompt;
-    if (opts.maxChars !== undefined) body["max_chars"] = opts.maxChars;
-    if (opts.overwrite !== undefined) body["overwrite"] = opts.overwrite;
+    assignDefined(body, [
+      ["include_existing", opts.includeExisting],
+      ["lang", opts.lang],
+      ["keywords", opts.keywords],
+      ["negative_keywords", opts.negativeKeywords],
+      ["gpt_prompt", opts.gptPrompt],
+      ["max_chars", opts.maxChars],
+      ["overwrite", opts.overwrite],
+    ]);
 
     const { data } = await this.request("POST", "/images/page_scrape", { body });
     return data as unknown as ScrapeResult;
@@ -195,22 +194,31 @@ export class AltTextApi {
 
   // -- Private helpers --
 
+  private parseImageList(data: Record<string, unknown>, response: Response): ImageListResult {
+    const typed = data as unknown as { images: ImageRecord[] };
+    return { images: typed.images, pagination: parsePagination(response) };
+  }
+
   private async generateImage(
     imageSource: Record<string, unknown>,
     opts: GenerateOptions,
   ): Promise<ImageRecord> {
     const imageEnvelope = { ...imageSource };
-    if (opts.assetId !== undefined) imageEnvelope["asset_id"] = opts.assetId;
-    if (opts.tags !== undefined) imageEnvelope["tags"] = opts.tags;
-    if (opts.metadata !== undefined) imageEnvelope["metadata"] = opts.metadata;
+    assignDefined(imageEnvelope, [
+      ["asset_id", opts.assetId],
+      ["tags", opts.tags],
+      ["metadata", opts.metadata],
+    ]);
 
     const body: Record<string, unknown> = { image: imageEnvelope, async: false };
-    if (opts.lang !== undefined) body["lang"] = opts.lang;
-    if (opts.keywords !== undefined) body["keywords"] = opts.keywords;
-    if (opts.negativeKeywords !== undefined) body["negative_keywords"] = opts.negativeKeywords;
-    if (opts.gptPrompt !== undefined) body["gpt_prompt"] = opts.gptPrompt;
-    if (opts.maxChars !== undefined) body["max_chars"] = opts.maxChars;
-    if (opts.overwrite !== undefined) body["overwrite"] = opts.overwrite;
+    assignDefined(body, [
+      ["lang", opts.lang],
+      ["keywords", opts.keywords],
+      ["negative_keywords", opts.negativeKeywords],
+      ["gpt_prompt", opts.gptPrompt],
+      ["max_chars", opts.maxChars],
+      ["overwrite", opts.overwrite],
+    ]);
 
     const { data } = await this.request("POST", "/images", { body });
     return data as unknown as ImageRecord;
@@ -318,4 +326,16 @@ function connectionError(err: unknown): AltTextApiError {
     errors: {},
     message: `Could not connect to AltText.ai API: ${message}`,
   });
+}
+
+/** Copy entries into `target`, skipping undefined values. */
+function assignDefined(
+  target: Record<string, unknown>,
+  entries: ReadonlyArray<readonly [string, unknown]>,
+): void {
+  for (const [key, value] of entries) {
+    if (value !== undefined) {
+      target[key] = value;
+    }
+  }
 }

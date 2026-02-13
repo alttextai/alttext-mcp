@@ -87,25 +87,27 @@ async function resolveAndValidateFile(
   return resolved;
 }
 
+/** Snake_case MCP tool arg → camelCase GenerateOptions key. */
+const GENERATE_OPTION_KEYS: ReadonlyArray<readonly [string, string]> = [
+  ["asset_id", "assetId"],
+  ["lang", "lang"],
+  ["keywords", "keywords"],
+  ["negative_keywords", "negativeKeywords"],
+  ["gpt_prompt", "gptPrompt"],
+  ["max_chars", "maxChars"],
+  ["overwrite", "overwrite"],
+  ["tags", "tags"],
+  ["metadata", "metadata"],
+];
+
 function toGenerateOptions(args: Record<string, unknown>): GenerateOptions {
-  const opts: GenerateOptions = {};
-  if (args["asset_id"] !== undefined)
-    (opts as Record<string, unknown>)["assetId"] = args["asset_id"];
-  if (args["lang"] !== undefined) (opts as Record<string, unknown>)["lang"] = args["lang"];
-  if (args["keywords"] !== undefined)
-    (opts as Record<string, unknown>)["keywords"] = args["keywords"];
-  if (args["negative_keywords"] !== undefined)
-    (opts as Record<string, unknown>)["negativeKeywords"] = args["negative_keywords"];
-  if (args["gpt_prompt"] !== undefined)
-    (opts as Record<string, unknown>)["gptPrompt"] = args["gpt_prompt"];
-  if (args["max_chars"] !== undefined)
-    (opts as Record<string, unknown>)["maxChars"] = args["max_chars"];
-  if (args["overwrite"] !== undefined)
-    (opts as Record<string, unknown>)["overwrite"] = args["overwrite"];
-  if (args["tags"] !== undefined) (opts as Record<string, unknown>)["tags"] = args["tags"];
-  if (args["metadata"] !== undefined)
-    (opts as Record<string, unknown>)["metadata"] = args["metadata"];
-  return opts;
+  const opts: Record<string, unknown> = {};
+  for (const [snakeKey, camelKey] of GENERATE_OPTION_KEYS) {
+    if (args[snakeKey] !== undefined) {
+      opts[camelKey] = args[snakeKey];
+    }
+  }
+  return opts as GenerateOptions;
 }
 
 // ============================================================

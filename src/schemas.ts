@@ -39,11 +39,11 @@ export const generationOptionsSchema = {
     .describe("Custom metadata (string key-value pairs)"),
 } as const;
 
-/** Subset of generation options for page scraping. */
+/** Subset of generation options applicable to page scraping. */
 export const scrapeOptionsSchema = {
-  lang: z.string().max(64).optional().describe("Language codes for generation"),
-  keywords: z.array(z.string().max(128)).max(20).optional().describe("Keywords to incorporate"),
-  negative_keywords: z.array(z.string().max(128)).max(20).optional().describe("Keywords to avoid"),
-  gpt_prompt: z.string().max(768).optional().describe("Custom prompt override"),
-  max_chars: z.number().int().min(1).max(1000).optional().describe("Maximum character length"),
+  lang: generationOptionsSchema.lang,
+  keywords: generationOptionsSchema.keywords,
+  negative_keywords: generationOptionsSchema.negative_keywords,
+  gpt_prompt: generationOptionsSchema.gpt_prompt,
+  max_chars: generationOptionsSchema.max_chars,
 } as const;
