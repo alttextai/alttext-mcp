@@ -37,7 +37,7 @@ if (!apiKey) {
   process.exit(1);
 }
 
-const api = new AltTextApi(apiKey, process.env["ALTTEXT_API_BASE_URL"]);
+const api = new AltTextApi(apiKey, process.env["ALTTEXT_API_BASE_URL"], version);
 const server = new McpServer({ name: "alttext-ai", version });
 
 // -- Helpers --

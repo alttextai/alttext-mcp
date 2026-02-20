@@ -15,7 +15,7 @@ Add the server to your MCP client configuration:
   "mcpServers": {
     "alttext-ai": {
       "command": "npx",
-      "args": ["-y", "@alttextai/alttext-mcp"],
+      "args": ["-y", "@alttext_ai/alttext-mcp"],
       "env": {
         "ALTTEXT_API_KEY": "your-api-key"
       }

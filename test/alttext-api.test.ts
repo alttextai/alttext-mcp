@@ -45,6 +45,18 @@ describe("AltTextApi", () => {
         }),
       );
     });
+
+    it("sends the X-Client header with version", async () => {
+      const apiWithVersion = new AltTextApi(API_KEY, undefined, "1.0.0");
+      fetchMock.mockResolvedValueOnce(jsonResponse({ name: "Test" }));
+      await apiWithVersion.getAccount();
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${BASE_URL}/account`,
+        expect.objectContaining({
+          headers: expect.objectContaining({ "X-Client": "mcp-server/1.0.0" }) as unknown,
+        }),
+      );
+    });
   });
 
   describe("createImage", () => {

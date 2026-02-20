@@ -39,10 +39,12 @@ export class AltTextApiError extends Error {
 export class AltTextApi {
   private readonly apiKey: string;
   private readonly baseUrl: string;
+  private readonly clientHeader: string;
 
-  constructor(apiKey: string, baseUrl?: string) {
+  constructor(apiKey: string, baseUrl?: string, version?: string) {
     this.apiKey = apiKey;
     this.baseUrl = (baseUrl ?? "https://alttext.ai/api/v1").replace(/\/+$/, "");
+    this.clientHeader = `mcp-server/${version ?? "unknown"}`;
   }
 
   async getAccount(): Promise<AccountRecord> {
@@ -162,7 +164,11 @@ export class AltTextApi {
     try {
       response = await fetch(url, {
         method: "POST",
-        headers: { "X-API-Key": this.apiKey, Accept: "application/json" },
+        headers: {
+          "X-API-Key": this.apiKey,
+          "X-Client": this.clientHeader,
+          Accept: "application/json",
+        },
         body: formData,
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
@@ -236,6 +242,7 @@ export class AltTextApi {
 
     const headers: Record<string, string> = {
       "X-API-Key": this.apiKey,
+      "X-Client": this.clientHeader,
       Accept: "application/json",
     };
 
