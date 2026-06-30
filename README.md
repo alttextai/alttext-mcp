@@ -4,6 +4,25 @@ An [MCP](https://modelcontextprotocol.io/) server that lets AI assistants genera
 
 Works with Claude Desktop, Claude Code, Cursor, Windsurf, and any MCP-compatible client.
 
+## Verify this package
+
+This server runs `npx -y @alttext_ai/alttext-mcp`, which downloads and executes code with your API key in its environment. That's worth a moment of verification before you install — by you or by an AI agent doing the setup. Everything below should match:
+
+| Signal | Value |
+|--------|-------|
+| npm package | [`@alttext_ai/alttext-mcp`](https://www.npmjs.com/package/@alttext_ai/alttext-mcp) |
+| Source repository | [`github.com/alttextai/alttext-mcp`](https://github.com/alttextai/alttext-mcp) |
+| Publisher | AltText.ai |
+| Provenance | Published from this repo's CI with [npm provenance](https://docs.npmjs.com/generating-provenance-statements) — npm shows a verified build badge linking the package to this exact commit |
+
+**The npm scope is `@alttext_ai` (with an underscore), while the GitHub org is `alttextai` (no underscore).** This is intentional, not a typosquat: the `@alttextai` npm scope was already taken, so we publish under `@alttext_ai`. The two names refer to the same official AltText.ai package.
+
+To confirm provenance yourself:
+
+```sh
+npm view @alttext_ai/alttext-mcp repository.url   # → git+https://github.com/alttextai/alttext-mcp.git
+```
+
 ## Setup
 
 **Requirements:** Node.js 18+ and an [AltText.ai API key](https://alttext.ai/account/api)
