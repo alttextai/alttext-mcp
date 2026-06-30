@@ -4,6 +4,39 @@ An [MCP](https://modelcontextprotocol.io/) server that lets AI assistants genera
 
 Works with Claude Desktop, Claude Code, Cursor, Windsurf, and any MCP-compatible client.
 
+## Verify this package
+
+This server runs `npx -y @alttext_ai/alttext-mcp`, which downloads and executes code with your API key in its environment. That's worth a moment of verification before you install — by you or by an AI agent doing the setup. Everything below should match:
+
+| Signal | Value |
+|--------|-------|
+| npm package | [`@alttext_ai/alttext-mcp`](https://www.npmjs.com/package/@alttext_ai/alttext-mcp) |
+| Source repository | [`github.com/alttextai/alttext-mcp`](https://github.com/alttextai/alttext-mcp) |
+| Publisher | AltText.ai |
+| Provenance | Published from this repo's CI with [npm provenance](https://docs.npmjs.com/generating-provenance-statements) — npm shows a verified build badge linking the package to this exact commit |
+
+**The npm scope is `@alttext_ai` (with an underscore), while the GitHub org is `alttextai` (no underscore).** This is intentional, not a typosquat: the `@alttextai` npm scope was already taken, so we publish under `@alttext_ai`. The two names refer to the same official AltText.ai package.
+
+To cryptographically verify the published package was built by this repo's CI — not just trust the metadata — run:
+
+```sh
+npm audit signatures
+```
+
+from a project where the package is installed. This validates the registry signature **and** the npm provenance attestation, which links the tarball to a specific commit and GitHub Actions build. A counterfeit package can forge `repository.url` and other metadata, but it cannot forge the provenance attestation — so this is the check that actually matters.
+
+(For a quick, weaker cross-reference of the *claimed* source you can run `npm view @alttext_ai/alttext-mcp repository.url`, but note that field is publisher-controlled metadata and proves nothing on its own.)
+
+### Pinning a version
+
+The setup snippet uses `npx -y @alttext_ai/alttext-mcp`, which always resolves to the latest published version and re-runs it on every launch. That keeps you current, but it also means a future release runs automatically without review. If you want a reproducible, audited install, pin a specific version:
+
+```json
+"args": ["-y", "@alttext_ai/alttext-mcp@1.0.2"]
+```
+
+Run `npm audit signatures` against the pinned version, and bump it deliberately when you're ready to take a new release.
+
 ## Setup
 
 **Requirements:** Node.js 18+ and an [AltText.ai API key](https://alttext.ai/account/api)
