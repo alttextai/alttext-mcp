@@ -27,6 +27,16 @@ from a project where the package is installed. This validates the registry signa
 
 (For a quick, weaker cross-reference of the *claimed* source you can run `npm view @alttext_ai/alttext-mcp repository.url`, but note that field is publisher-controlled metadata and proves nothing on its own.)
 
+### Pinning a version
+
+The setup snippet uses `npx -y @alttext_ai/alttext-mcp`, which always resolves to the latest published version and re-runs it on every launch. That keeps you current, but it also means a future release runs automatically without review. If you want a reproducible, audited install, pin a specific version:
+
+```json
+"args": ["-y", "@alttext_ai/alttext-mcp@1.0.2"]
+```
+
+Run `npm audit signatures` against the pinned version, and bump it deliberately when you're ready to take a new release.
+
 ## Setup
 
 **Requirements:** Node.js 18+ and an [AltText.ai API key](https://alttext.ai/account/api)
