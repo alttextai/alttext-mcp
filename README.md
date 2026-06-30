@@ -17,11 +17,15 @@ This server runs `npx -y @alttext_ai/alttext-mcp`, which downloads and executes 
 
 **The npm scope is `@alttext_ai` (with an underscore), while the GitHub org is `alttextai` (no underscore).** This is intentional, not a typosquat: the `@alttextai` npm scope was already taken, so we publish under `@alttext_ai`. The two names refer to the same official AltText.ai package.
 
-To confirm provenance yourself:
+To cryptographically verify the published package was built by this repo's CI — not just trust the metadata — run:
 
 ```sh
-npm view @alttext_ai/alttext-mcp repository.url   # → git+https://github.com/alttextai/alttext-mcp.git
+npm audit signatures
 ```
+
+from a project where the package is installed. This validates the registry signature **and** the npm provenance attestation, which links the tarball to a specific commit and GitHub Actions build. A counterfeit package can forge `repository.url` and other metadata, but it cannot forge the provenance attestation — so this is the check that actually matters.
+
+(For a quick, weaker cross-reference of the *claimed* source you can run `npm view @alttext_ai/alttext-mcp repository.url`, but note that field is publisher-controlled metadata and proves nothing on its own.)
 
 ## Setup
 
