@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "status": "contract fixture, not deployment evidence",
+  "configuration": {
+    "MCP_ENABLED": "false by default",
+    "MCP_ISSUER": "exact public Node origin, no trailing slash",
+    "MCP_PRODUCT_ORIGIN": "exact Rails origin, no trailing slash",
+    "MCP_HANDOFF_SECRET": "separate >=32 random byte secret per brand, used only for HMAC",
+    "MCP_BRIDGE_SECRET": "different >=32 random byte bearer secret per brand",
+    "MCP_CALLBACK_URL": "MCP_ISSUER + /oauth/interaction/callback"
+  },
+  "signing": {
+    "format": "base64url(UTF8 JSON payload) + dot + base64url(HMAC-SHA256(secret, encoded_payload))",
+    "validation": "Compare MAC constant-time; parse only after MAC; require exact version, issuer, audience, callback, known scopes and bounded lengths; exp greater than now; iat no more than 30 seconds ahead; exp-iat <=300; nonce >=32 random bytes in production. Never normalize untrusted URL before exact comparison. JSON field order is irrelevant to verification: sign the exact encoded bytes."
+  },
+  "consent": {
+    "get": "/mcp/connections/new?handoff=<signed payload>",
+    "post": "/mcp/connections",
+    "fields": [
+      "handoff",
+      "decision (allow or deny)",
+      "authenticity_token",
+      "account_id (Beaconed only; must be current authorized membership)"
+    ],
+    "behavior": "Existing real login, no impersonation consent. Revalidate handoff and current owner on POST. Consent always shows escaped client name as unverified, redirect_host, chosen account, read/write powers and credit/live publication effects. Denial creates no key and redirects fixed callback with error=access_denied, interaction_id, state=nonce. Success creates the connection and stores only the redemption code digest, expires redemption within 5 minutes; redirects fixed callback with code, interaction_id, state=nonce. Never redirect to client redirect_host."
+  },
+  "exchange": {
+    "method": "POST",
+    "path": "/api/internal/mcp/handoffs",
+    "authorization": "Bearer MCP_BRIDGE_SECRET; browser cookie alone insufficient",
+    "request": {
+      "code": "opaque 32+ random bytes",
+      "interaction_id": "interaction-example",
+      "nonce": "nonce-example-32-bytes-minimum-prod"
+    },
+    "response": {
+      "connection_id": "opaque UUID",
+      "user_id": "string",
+      "account_id": "string",
+      "scopes": ["mcp:read", "mcp:write"],
+      "expires_at": "ISO8601 UTC",
+      "api_key": "returned once only"
+    },
+    "semantics": "Require matching interaction/nonce and unexpired active grant before atomic consume. One successful caller only. Missing, expired, mismatched or reused code =>400 {error:invalid_grant}; wrong/missing bridge credential =>401 {error:invalid_client}. Disabled feature=>404. No secrets/codes/authorization in logs. Create the dedicated API key inside the winning redemption transaction and return it once; never precreate/persist pending raw keys. ApiKey belongs_to mcp_connection via optional FK; revoke grants rather than deleting them and restrict deletion so a delegated key never becomes ordinary."
+  },
+  "connection": {
+    "method": "GET",
+    "path": "/api/internal/mcp/connections/:connection_id",
+    "authorization": "same bridge bearer",
+    "response": {
+      "active": true,
+      "connection_id": "opaque UUID",
+      "user_id": "string",
+      "account_id": "string",
+      "scopes": ["mcp:read", "mcp:write"],
+      "expires_at": "ISO8601 UTC"
+    },
+    "inactive": "200 {active:false} for expired/revoked/unknown or currently unauthorized grant; no credential ever returned",
+    "delete": "DELETE same internal path revokes grant and dedicated key; idempotent204, authenticated bridge only",
+    "customer_revoke": "DELETE /mcp/connections/:connection_id with real login, account ownership/policy and CSRF; never allow user-editable key name to establish grant binding"
+  },
+  "authority": {
+    "alttext": "kept user and account; user.account_id equals grant.account_id; ordinary user permitted; no platform admin implication",
+    "beaconed": "current Membership through role_for(account), grant creation follows ApiKeyPolicy, downgrades/removal immediately invalidate authority; never system user.role",
+    "scope": "mcp:read required for safe reads; mcp:write required for create/update/destroy. Check at every upstream API request including when OAuth token remains valid. Grant lifetime max90days. Ordinary keys unchanged."
+  },
+  "fixture": {
+    "secret": "test-only-handoff-secret-not-for-production",
+    "claims": {
+      "v": 1,
+      "iss": "https://mcp.example.test",
+      "aud": "https://app.example.test",
+      "iat": 1800000000,
+      "exp": 1800000300,
+      "interaction_id": "interaction-example",
+      "nonce": "nonce-example-32-bytes-minimum-prod",
+      "return_url": "https://mcp.example.test/oauth/interaction/callback",
+      "client_id": "client-example",
+      "client_name": "Example assistant",
+      "redirect_host": "assistant.example.test",
+      "scopes": ["mcp:read", "mcp:write"]
+    },
+    "signed_handoff": "eyJ2IjoxLCJpc3MiOiJodHRwczovL21jcC5leGFtcGxlLnRlc3QiLCJhdWQiOiJodHRwczovL2FwcC5leGFtcGxlLnRlc3QiLCJpYXQiOjE4MDAwMDAwMDAsImV4cCI6MTgwMDAwMDMwMCwiaW50ZXJhY3Rpb25faWQiOiJpbnRlcmFjdGlvbi1leGFtcGxlIiwibm9uY2UiOiJub25jZS1leGFtcGxlLTMyLWJ5dGVzLW1pbmltdW0tcHJvZCIsInJldHVybl91cmwiOiJodHRwczovL21jcC5leGFtcGxlLnRlc3Qvb2F1dGgvaW50ZXJhY3Rpb24vY2FsbGJhY2siLCJjbGllbnRfaWQiOiJjbGllbnQtZXhhbXBsZSIsImNsaWVudF9uYW1lIjoiRXhhbXBsZSBhc3Npc3RhbnQiLCJyZWRpcmVjdF9ob3N0IjoiYXNzaXN0YW50LmV4YW1wbGUudGVzdCIsInNjb3BlcyI6WyJtY3A6cmVhZCIsIm1jcDp3cml0ZSJdfQ.XJz3G75XhHs2QtPOPqInZXOPA8nJTAxsDg8jEk5JdBM"
+  }
+}

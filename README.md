@@ -39,7 +39,7 @@ Run `npm audit signatures` against the pinned version, and bump it deliberately 
 
 ## Setup
 
-**Requirements:** Node.js 18+ and an [AltText.ai API key](https://alttext.ai/account/api)
+**Requirements:** Node.js 22+ and an [AltText.ai API key](https://alttext.ai/account/api)
 
 Add the server to your MCP client configuration:
 
@@ -146,6 +146,8 @@ npm run lint
 ```
 
 Tests use mocked `fetch` calls -- no API key or network access needed.
+
+Hosted deployments must rate-limit `POST /register` at a trusted edge using the verified client address. The Node service deliberately ignores forwarded client-address headers because accepting them without an authenticated proxy boundary would let callers spoof the rate-limit identity.
 
 ## License
 
