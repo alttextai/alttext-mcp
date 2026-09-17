@@ -48,6 +48,14 @@ export function createHttp(
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = new URL(req.url ?? "/", config.issuer);
     const publicUrl = new URL(config.issuer);
+    // Load balancer health checks use the target IP as the Host header. Keep the
+    // probe outside the public-origin gate; the task security group still limits
+    // this port to the load balancer.
+    if (url.pathname === "/health") {
+      await store.redis.ping();
+      send(res, 200, { healthy: true });
+      return;
+    }
     if (req.headers.host !== publicUrl.host) {
       send(res, 403, { error: "untrusted_host" });
       return;
@@ -62,11 +70,6 @@ export function createHttp(
     }
     if (Number(req.headers["content-length"] ?? 0) > 1_048_576) {
       send(res, 413, { error: "request_too_large" });
-      return;
-    }
-    if (url.pathname === "/health") {
-      await store.redis.ping();
-      send(res, 200, { healthy: true });
       return;
     }
     if (
