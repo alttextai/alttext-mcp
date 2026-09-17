@@ -4,6 +4,6 @@ export default defineConfig({
   test: {
     include: ["test/**/*.test.ts"],
     globals: false,
-    forceRerunTriggers: ["**/package.json", "**/{vitest,vite}.config.*/**", "src/**"],
+    forceRerunTriggers: ["**/{package,server}.json", "**/{vitest,vite}.config.*/**", "src/**"],
   },
 });

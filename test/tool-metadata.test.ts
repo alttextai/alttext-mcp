@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { execFile } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
 
 const client = new Client({ name: "metadata-test", version: "1.0.0" });
@@ -59,5 +60,30 @@ describe("tool discovery effects", () => {
       expect(tool?.description).toMatch(/conversion/);
     }
     expect(tools.find((tool) => tool.name === "bulk_create")?.description).toMatch(/asynchronous/);
+  });
+});
+
+describe("registry metadata", () => {
+  it("declares every supported environment variable", () => {
+    const manifest = JSON.parse(
+      readFileSync(new URL("../server.json", import.meta.url), "utf8"),
+    ) as {
+      packages: Array<{
+        environmentVariables: Array<{
+          name: string;
+          isRequired: boolean;
+          isSecret: boolean;
+        }>;
+      }>;
+    };
+
+    expect(manifest.packages[0]?.environmentVariables).toEqual([
+      expect.objectContaining({ name: "ALTTEXT_API_KEY", isRequired: true, isSecret: true }),
+      expect.objectContaining({
+        name: "ALTTEXT_API_BASE_URL",
+        isRequired: false,
+        isSecret: false,
+      }),
+    ]);
   });
 });
