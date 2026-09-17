@@ -276,6 +276,14 @@ describe("HTTP OAuth and MCP", () => {
       req.end();
     });
     expect(hostile).toBe(403);
+    const loadBalancerHealth = await new Promise<number | undefined>((resolve) => {
+      const req = request(`${issuer}/health`, { headers: { Host: "10.0.0.10:3000" } }, (res) => {
+        res.resume();
+        resolve(res.statusCode);
+      });
+      req.end();
+    });
+    expect(loadBalancerHealth).toBe(200);
   });
   it("rejects insecure registration and metadata fetch URLs", async () => {
     for (const metadata of [
