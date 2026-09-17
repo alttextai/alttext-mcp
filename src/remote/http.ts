@@ -86,15 +86,6 @@ export function createHttp(
       await oauthCallback(req, res);
       return;
     }
-    if (url.pathname === "/register") {
-      const key = `${config.namespace}:dcr:${req.socket.remoteAddress ?? "unknown"}:${Math.floor(Date.now() / 60_000)}`;
-      const count = await store.redis.incr(key);
-      if (count === 1) await store.redis.expire(key, 120);
-      if (count > 20) {
-        send(res, 429, { error: "rate_limited" });
-        return;
-      }
-    }
     if (url.pathname === "/authorize" && url.searchParams.get("resource") !== config.resource) {
       send(res, 400, { error: "invalid_target" });
       return;

@@ -41,14 +41,18 @@ export class OAuthStore {
     };
     return {
       upsert: async (id, payload, expiresIn) => {
-        const ttl = Math.max(1, Math.ceil(expiresIn ?? 90 * 86400));
-        const tx = this.redis
-          .multi()
-          .hSet(key(id), "payload", this.encrypt(payload, key(id)))
-          .expire(key(id), ttl);
+        const ttl = expiresIn === undefined ? undefined : Math.max(1, Math.ceil(expiresIn));
+        const previous = await find(id);
+        const tx = this.redis.multi().hSet(key(id), "payload", this.encrypt(payload, key(id)));
+        if (ttl !== undefined) tx.expire(key(id), ttl);
         for (const field of ["uid", "userCode"] as const) {
           const value = payload[field];
-          if (typeof value === "string") tx.set(index(field, value), id, { EX: ttl });
+          const oldValue = previous?.[field];
+          if (typeof oldValue === "string" && oldValue !== value) tx.del(index(field, oldValue));
+          if (typeof value === "string") {
+            if (ttl === undefined) tx.set(index(field, value), id);
+            else tx.set(index(field, value), id, { EX: ttl });
+          }
         }
         if (typeof payload.grantId === "string") {
           tx.sAdd(grant(payload.grantId), key(id));
@@ -77,7 +81,13 @@ export class OAuthStore {
         if (result !== 1) throw new Error("Authorization artifact already consumed");
       },
       destroy: async (id) => {
-        await this.redis.del(key(id));
+        const payload = await find(id);
+        const tx = this.redis.multi().del(key(id));
+        for (const field of ["uid", "userCode"] as const) {
+          const value = payload?.[field];
+          if (typeof value === "string") tx.del(index(field, value));
+        }
+        await tx.exec();
       },
       revokeByGrantId: async (id) => {
         await this.redis.eval(

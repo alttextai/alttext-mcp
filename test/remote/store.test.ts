@@ -34,6 +34,16 @@ afterAll(async () => {
 });
 
 describe("durable OAuth adapter", () => {
+  it("keeps non-expiring client records and their indexes persistent", async () => {
+    const adapter = store.adapter("Client");
+    await adapter.upsert("client", { uid: "client-uid", clientId: "client" });
+    expect(await redis.ttl("test:Client:client")).toBe(-1);
+    expect(await redis.ttl("test:index:Client:uid:client-uid")).toBe(-1);
+    expect((await adapter.findByUid("client-uid"))?.clientId).toBe("client");
+    await adapter.destroy("client");
+    expect(await adapter.findByUid("client-uid")).toBeUndefined();
+  });
+
   it("rejects ciphertext moved to a different grant record", async () => {
     const adapter = store.adapter("Connection");
     await adapter.upsert("alice", { secret: "alice-key" }, 60);
