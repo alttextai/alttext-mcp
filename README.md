@@ -1,6 +1,6 @@
 # AltText.ai MCP Server
 
-An [MCP](https://modelcontextprotocol.io/) server that lets AI assistants generate alt text, manage image libraries, and audit web pages for accessibility using the [AltText.ai](https://alttext.ai) API.
+An [MCP](https://modelcontextprotocol.io/) server that lets AI assistants generate alt text, manage image libraries, and queue alt text generation for web page images using the [AltText.ai](https://alttext.ai) API.
 
 Works with Claude Desktop, Claude Code, Cursor, Windsurf, and any MCP-compatible client.
 
@@ -32,7 +32,7 @@ from a project where the package is installed. This validates the registry signa
 The setup snippet uses `npx -y @alttext_ai/alttext-mcp`, which always resolves to the latest published version and re-runs it on every launch. That keeps you current, but it also means a future release runs automatically without review. If you want a reproducible, audited install, pin a specific version:
 
 ```json
-"args": ["-y", "@alttext_ai/alttext-mcp@1.0.2"]
+"args": ["-y", "@alttext_ai/alttext-mcp@1.0.5"]
 ```
 
 Run `npm audit signatures` against the pinned version, and bump it deliberately when you're ready to take a new release.
@@ -77,9 +77,9 @@ Add the server to your MCP client configuration:
 ### Generate Alt Text
 | Tool | Description |
 |------|-------------|
-| `generate_alt_text` | Generate alt text for an image URL. Supports multilingual output, custom prompts, keywords, and character limits. Costs 1 credit. |
-| `generate_alt_text_from_file` | Generate alt text from a local image file. Automatically base64-encodes and uploads. Costs 1 credit. |
-| `translate_image` | Add alt text in a new language for an existing image (by asset_id). Costs 1 credit. |
+| `generate_alt_text` | Generate alt text for an image URL. Supports multilingual output, custom prompts, keywords, and character limits. Uses account credits. |
+| `generate_alt_text_from_file` | Generate alt text from a local image file. Automatically base64-encodes and uploads. Uses account credits. |
+| `translate_image` | Add alt text in a new language for an existing image (by asset_id). Uses account credits. |
 
 ### Manage Image Library
 | Tool | Description |
@@ -95,6 +95,14 @@ Add the server to your MCP client configuration:
 |------|-------------|
 | `bulk_create` | Bulk generate alt text from a CSV file with image URLs and optional metadata. |
 | `scrape_page` | Scan a web page, find images missing alt text, and queue generation. Results are async -- use `list_images` to check progress. |
+
+## Effects and processing
+
+This package uses stdio and runs on the machine launching the MCP client. Image and CSV paths refer to that machine; selected file contents are uploaded to AltText.ai.
+
+Generation and translation use your account credits. Additional languages and image conversion can increase the total. Check `get_account` before paid work. Generation can overwrite existing alt text when requested; updates replace supplied fields and deletion removes the image from the library.
+
+CSV imports and page scraping queue background processing. An accepted request does not mean generation has finished; inspect the image library and any configured completion notifications. Tool annotations describe effects for clients; they do not enforce confirmation.
 
 ## Example Prompts
 
@@ -118,7 +126,7 @@ Once configured, just ask your AI assistant:
 - "Delete image xyz789"
 
 ### Bulk Operations
-- "Scan https://example.com for images missing alt text"
+- "Generate alt text for images missing it on https://example.com"
 - "Process this CSV file of image URLs" (bulk_create)
 
 ## Environment Variables
@@ -142,3 +150,7 @@ Tests use mocked `fetch` calls -- no API key or network access needed.
 ## License
 
 MIT
+
+## Registry publishing
+
+`server.json` describes the stdio npm package. Its name matches `mcpName` in `package.json`; both versions must match the release being submitted. Publish and verify that exact npm version before running `mcp-publisher publish`. Registry acceptance and directory approval are separate from an npm release.

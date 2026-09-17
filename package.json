@@ -1,7 +1,7 @@
 {
   "name": "@alttext_ai/alttext-mcp",
-  "version": "1.0.4",
-  "description": "MCP server for AltText.ai — generate alt text, manage image libraries, and audit web pages for accessibility",
+  "version": "1.0.5",
+  "description": "Generate alt text, translate descriptions, and manage your AltText.ai image library.",
   "license": "MIT",
   "author": "AltText.ai (https://alttext.ai)",
   "homepage": "https://alttext.ai",
@@ -56,5 +56,6 @@
   },
   "engines": {
     "node": ">=18"
-  }
+  },
+  "mcpName": "io.github.alttextai/alttext-mcp"
 }

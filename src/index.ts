@@ -118,6 +118,12 @@ server.registerTool(
   "get_account",
   {
     title: "Get Account",
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     description: "Get your AltText.ai account info including credit balance, usage, and settings",
     inputSchema: {},
   },
@@ -135,6 +141,12 @@ server.registerTool(
   "update_account",
   {
     title: "Update Account",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     description: "Update your AltText.ai account settings (name, webhook URL, notification email)",
     inputSchema: {
       name: z.string().max(256).optional().describe("Account name"),
@@ -164,8 +176,14 @@ server.registerTool(
   "generate_alt_text",
   {
     title: "Generate Alt Text",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
     description:
-      "Generate AI-powered alt text for an image URL. Returns the result synchronously (may take a few seconds). Costs 1 credit per image.",
+      "Generate AI-powered alt text for an image URL. Returns the result synchronously (may take a few seconds). Uses account credits; additional languages and image conversion can increase the total. Can overwrite existing alt text when requested.",
     inputSchema: {
       url: z.url().describe("Public URL of the image"),
       ...generationOptionsSchema,
@@ -186,8 +204,14 @@ server.registerTool(
   "generate_alt_text_from_file",
   {
     title: "Generate Alt Text from File",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
     description:
-      "Generate alt text from a local image file. Reads the file, base64-encodes it, and sends it to AltText.ai. Costs 1 credit.",
+      "Generate alt text from a local image file. Reads a file on the MCP server machine and uploads it to AltText.ai. Uses account credits; additional languages and image conversion can increase the total. Can overwrite existing alt text when requested.",
     inputSchema: {
       file_path: z.string().max(4096).describe("Absolute path to a local image file"),
       ...generationOptionsSchema,
@@ -210,8 +234,14 @@ server.registerTool(
   "translate_image",
   {
     title: "Translate Image",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
     description:
-      "Add alt text in a new language for an existing image. Uses the asset_id to find the image and generates a translation. Costs 1 credit.",
+      "Add alt text in a new language for an existing image. Uses the asset_id to find the image and generates a translation. Uses account credits for each newly generated language.",
     inputSchema: {
       asset_id: z.string().max(256).describe("The asset ID of the existing image to translate"),
       lang: z
@@ -238,6 +268,12 @@ server.registerTool(
   "list_images",
   {
     title: "List Images",
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     description: "List images in your AltText.ai library with pagination",
     inputSchema: {
       page: z.number().int().min(1).optional().describe("Page number (default: 1)"),
@@ -271,6 +307,12 @@ server.registerTool(
   "search_images",
   {
     title: "Search Images",
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     description: "Search images by alt text content",
     inputSchema: {
       query: z.string().max(256).describe("Search query to match against alt text"),
@@ -298,6 +340,12 @@ server.registerTool(
   "get_image",
   {
     title: "Get Image",
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     description: "Get details for a specific image by its asset ID",
     inputSchema: {
       asset_id: z.string().max(256).describe("The asset ID of the image"),
@@ -318,6 +366,12 @@ server.registerTool(
   "update_image",
   {
     title: "Update Image",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     description: "Update alt text and/or metadata for an existing image",
     inputSchema: {
       asset_id: z.string().max(256).describe("The asset ID of the image to update"),
@@ -359,6 +413,12 @@ server.registerTool(
   "delete_image",
   {
     title: "Delete Image",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
     description: "Delete an image from your AltText.ai library",
     inputSchema: {
       asset_id: z.string().max(256).describe("The asset ID of the image to delete"),
@@ -382,8 +442,14 @@ server.registerTool(
   "bulk_create",
   {
     title: "Bulk Create",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
     description:
-      "Bulk generate alt text for multiple images from a CSV file. CSV should have columns: url (required), asset_id, lang, keywords, tags, metadata (optional).",
+      "Upload a local CSV file from the MCP server machine and queue asynchronous alt-text generation using account credits. The response does not confirm generation completion. CSV should have columns: url (required), asset_id, lang, keywords, tags, metadata (optional).",
     inputSchema: {
       csv_file: z
         .string()
@@ -403,7 +469,7 @@ server.registerTool(
       const rowErrors = result.row_errors ?? [];
       const fileError = result.error;
 
-      let responseText = `Bulk import processed ${String(rows)} rows`;
+      let responseText = `CSV import response: ${String(rows)} rows. Generation runs asynchronously; this response does not confirm completion.`;
       if (rowErrors.length > 0) responseText += `\n\nErrors:\n${rowErrors.join("\n")}`;
       if (fileError) responseText += `\n\nFile error: ${fileError}`;
 
@@ -418,8 +484,14 @@ server.registerTool(
   "scrape_page",
   {
     title: "Scrape Page",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
     description:
-      "Find images on a web page and queue alt-text generation jobs. Images are processed asynchronously.",
+      "Find images on a web page and queue alt-text generation jobs. Uses account credits. Images are processed asynchronously; inspect the image library for results.",
     inputSchema: {
       url: z.url().describe("URL of the web page to scrape"),
       html: z
