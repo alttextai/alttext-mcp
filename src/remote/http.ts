@@ -9,7 +9,8 @@ import type { OAuthStore } from "./store.js";
 
 interface Handoff {
   nonce: string;
-  oidcScopes: string[];
+  // absent on handoffs written before openid support
+  oidcScopes?: string[];
   scopes: string[];
 }
 const OPENAI_APPS_CHALLENGE = "PlUuJJowjOgZmLFWv_wfh-9vnZDPkIcgxyaP-82wOqw";
@@ -208,7 +209,7 @@ export function createHttp(
         clientId: String(detail.params["client_id"]),
       });
       grant.addResourceScope(config.resource, connection.scopes.join(" "));
-      grant.addOIDCScope([...state.oidcScopes, ...connection.scopes].join(" "));
+      grant.addOIDCScope([...(state.oidcScopes ?? []), ...connection.scopes].join(" "));
       const grantId = await grant.save();
       await oauth.interactionFinished(
         req,
@@ -252,7 +253,7 @@ export function createHttp(
     const tokenScopes = (token.scope ?? "").split(" ").filter(Boolean);
     const requestedMcpScopes = tokenScopes.filter((scope) => scope.startsWith("mcp:"));
     const scopes = (requestedMcpScopes.length ? requestedMcpScopes : current.scopes).filter(
-      (scope) => current.scopes.includes(scope),
+      (scope) => current.scopes.includes(scope) && stored.scopes.includes(scope),
     );
     if (!scopes.includes("mcp:read")) {
       send(res, 403, { error: "insufficient_scope" });

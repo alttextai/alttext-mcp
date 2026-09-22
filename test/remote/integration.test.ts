@@ -21,6 +21,7 @@ interface TokenReply {
 }
 let redisProcess: ChildProcess;
 let redis: RedisClientType;
+let store: OAuthStore;
 let server: ReturnType<typeof createHttp>;
 let product: ReturnType<typeof createServer>;
 let issuer: string;
@@ -129,7 +130,7 @@ beforeAll(async () => {
     });
   });
   await new Promise<void>((resolve) => product.listen(productPort, "127.0.0.1", resolve));
-  const store = new OAuthStore(redis, config.namespace, config.encryptionKey);
+  store = new OAuthStore(redis, config.namespace, config.encryptionKey);
   const bridge = new ProductBridge(config);
   const oauth = createOAuth(config, store, bridge);
   server = createHttp(config, store, bridge, oauth, {
@@ -162,6 +163,7 @@ async function authorize(
   scopes = ["mcp:read", "mcp:write"],
   requestedScopes = scopes,
   registrationScopes = requestedScopes,
+  beforeCallback?: (interactionId: string) => Promise<void>,
 ) {
   connections.set(connectionId, scopes);
   const discovery = (await (
@@ -214,6 +216,7 @@ async function authorize(
       "base64url",
     ).toString(),
   ) as { return_url: string; interaction_id: string; nonce: string };
+  await beforeCallback?.(handoff.interaction_id);
   const callback = new URL(handoff.return_url);
   Object.entries({
     code: connectionId,
@@ -366,6 +369,26 @@ describe("HTTP OAuth and MCP", () => {
       "mcp:read",
     ]);
     expect(token.id_token).toBeTypeOf("string");
+    expect((await toolCall(token.access_token)).status).toBe(200);
+  });
+  it("never lets live scopes exceed the consented scopes on an OpenID-only token", async () => {
+    const { token } = await authorize("openid-read-only", ["mcp:read"], ["openid"]);
+    connections.set("openid-read-only", ["mcp:read", "mcp:write"]);
+    expect((await toolCall(token.access_token)).status).toBe(200);
+    expect((await toolCall(token.access_token, "mutate")).status).toBe(403);
+  });
+  it("completes consent for handoffs written before oidcScopes existed", async () => {
+    const { token } = await authorize(
+      "legacy-handoff",
+      ["mcp:read", "mcp:write"],
+      ["mcp:read", "mcp:write"],
+      ["mcp:read", "mcp:write"],
+      async (id) => {
+        const handoff = await store.get<{ nonce: string; scopes: string[] }>("Handoff", id);
+        if (!handoff) throw new Error("Missing handoff");
+        await store.put("Handoff", id, { nonce: handoff.nonce, scopes: handoff.scopes }, 300);
+      },
+    );
     expect((await toolCall(token.access_token)).status).toBe(200);
   });
 });
