@@ -9,6 +9,7 @@ import type { OAuthStore } from "./store.js";
 
 interface Handoff {
   nonce: string;
+  oidcScopes: string[];
   scopes: string[];
 }
 const OPENAI_APPS_CHALLENGE = "PlUuJJowjOgZmLFWv_wfh-9vnZDPkIcgxyaP-82wOqw";
@@ -121,23 +122,27 @@ export function createHttp(
       }
       const detail = await oauth.interactionDetails(req, res);
       const rawScope = detail.params["scope"];
-      const scopes = (typeof rawScope === "string" ? rawScope : "mcp:read")
+      const requestedScopes = (typeof rawScope === "string" ? rawScope : "mcp:read")
         .split(" ")
         .filter(Boolean);
-      if (
-        !scopes.includes("mcp:read") ||
-        scopes.some((s) => !["mcp:read", "mcp:write"].includes(s))
-      ) {
+      if (requestedScopes.some((s) => !["openid", "mcp:read", "mcp:write"].includes(s))) {
         send(res, 400, { error: "invalid_scope" });
         return;
       }
+      const requestedMcpScopes = requestedScopes.filter((scope) => scope.startsWith("mcp:"));
+      const scopes = requestedMcpScopes.length ? requestedMcpScopes : ["mcp:read", "mcp:write"];
+      if (!scopes.includes("mcp:read")) {
+        send(res, 400, { error: "invalid_scope" });
+        return;
+      }
+      const oidcScopes = requestedScopes.filter((scope) => scope === "openid");
       const client = await oauth.Client.find(String(detail.params["client_id"]));
       if (!client || detail.params["resource"] !== config.resource) {
         send(res, 400, { error: "invalid_client" });
         return;
       }
       const nonce = randomBytes(32).toString("base64url");
-      await store.put("Handoff", detail.uid, { nonce, scopes }, 300);
+      await store.put("Handoff", detail.uid, { nonce, oidcScopes, scopes }, 300);
       const now = Math.floor(Date.now() / 1000);
       const handoff = signHandoff(
         {
@@ -203,7 +208,7 @@ export function createHttp(
         clientId: String(detail.params["client_id"]),
       });
       grant.addResourceScope(config.resource, connection.scopes.join(" "));
-      grant.addOIDCScope(connection.scopes.join(" "));
+      grant.addOIDCScope([...state.oidcScopes, ...connection.scopes].join(" "));
       const grantId = await grant.save();
       await oauth.interactionFinished(
         req,
@@ -244,7 +249,11 @@ export function createHttp(
       deny();
       return;
     }
-    const scopes = (token.scope ?? "").split(" ").filter((s) => current.scopes.includes(s));
+    const tokenScopes = (token.scope ?? "").split(" ").filter(Boolean);
+    const requestedMcpScopes = tokenScopes.filter((scope) => scope.startsWith("mcp:"));
+    const scopes = (requestedMcpScopes.length ? requestedMcpScopes : current.scopes).filter(
+      (scope) => current.scopes.includes(scope),
+    );
     if (!scopes.includes("mcp:read")) {
       send(res, 403, { error: "insufficient_scope" });
       return;

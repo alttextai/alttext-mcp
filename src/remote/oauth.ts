@@ -20,7 +20,7 @@ export function createOAuth(
     },
     clientAuthMethods: ["none", "client_secret_basic", "client_secret_post"],
     claims: {},
-    scopes: ["mcp:read", "mcp:write"],
+    scopes: ["openid", "mcp:read", "mcp:write"],
     responseTypes: ["code"],
     clientDefaults: {
       id_token_signed_response_alg: "ES256",
