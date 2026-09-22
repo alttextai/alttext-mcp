@@ -9,7 +9,8 @@ import type { OAuthStore } from "./store.js";
 
 interface Handoff {
   nonce: string;
-  oidcScopes: string[];
+  // absent on handoffs written before openid support
+  oidcScopes?: string[];
   scopes: string[];
 }
 const OPENAI_APPS_CHALLENGE = "PlUuJJowjOgZmLFWv_wfh-9vnZDPkIcgxyaP-82wOqw";
@@ -89,7 +90,8 @@ export function createHttp(
       send(res, 200, {
         resource: config.resource,
         authorization_servers: [config.issuer],
-        scopes_supported: ["mcp:read", "mcp:write"],
+        // clients register with these (MCP 2025-11-25 Scope Selection Strategy), so openid must be here
+        scopes_supported: ["openid", "mcp:read", "mcp:write"],
         bearer_methods_supported: ["header"],
       });
       return;
@@ -129,18 +131,26 @@ export function createHttp(
         send(res, 400, { error: "invalid_scope" });
         return;
       }
-      const requestedMcpScopes = requestedScopes.filter((scope) => scope.startsWith("mcp:"));
-      const scopes = requestedMcpScopes.length ? requestedMcpScopes : ["mcp:read", "mcp:write"];
-      if (!scopes.includes("mcp:read")) {
-        send(res, 400, { error: "invalid_scope" });
-        return;
-      }
-      const oidcScopes = requestedScopes.filter((scope) => scope === "openid");
       const client = await oauth.Client.find(String(detail.params["client_id"]));
       if (!client || detail.params["resource"] !== config.resource) {
         send(res, 400, { error: "invalid_client" });
         return;
       }
+      const requestedMcpScopes = requestedScopes.filter((scope) => scope.startsWith("mcp:"));
+      const clientMcpScopes = (client.scope ?? "")
+        .split(" ")
+        .filter((scope) => scope.startsWith("mcp:"));
+      // an OpenID-only request never exceeds the MCP scopes the client registered
+      const scopes = requestedMcpScopes.length
+        ? requestedMcpScopes
+        : clientMcpScopes.length
+          ? clientMcpScopes
+          : ["mcp:read", "mcp:write"];
+      if (!scopes.includes("mcp:read")) {
+        send(res, 400, { error: "invalid_scope" });
+        return;
+      }
+      const oidcScopes = requestedScopes.filter((scope) => scope === "openid");
       const nonce = randomBytes(32).toString("base64url");
       await store.put("Handoff", detail.uid, { nonce, oidcScopes, scopes }, 300);
       const now = Math.floor(Date.now() / 1000);
@@ -208,7 +218,7 @@ export function createHttp(
         clientId: String(detail.params["client_id"]),
       });
       grant.addResourceScope(config.resource, connection.scopes.join(" "));
-      grant.addOIDCScope([...state.oidcScopes, ...connection.scopes].join(" "));
+      grant.addOIDCScope([...(state.oidcScopes ?? []), ...connection.scopes].join(" "));
       const grantId = await grant.save();
       await oauth.interactionFinished(
         req,
@@ -252,7 +262,7 @@ export function createHttp(
     const tokenScopes = (token.scope ?? "").split(" ").filter(Boolean);
     const requestedMcpScopes = tokenScopes.filter((scope) => scope.startsWith("mcp:"));
     const scopes = (requestedMcpScopes.length ? requestedMcpScopes : current.scopes).filter(
-      (scope) => current.scopes.includes(scope),
+      (scope) => current.scopes.includes(scope) && stored.scopes.includes(scope),
     );
     if (!scopes.includes("mcp:read")) {
       send(res, 403, { error: "insufficient_scope" });
@@ -290,7 +300,10 @@ export function createHttp(
       !catalog.readTools.has(request.params?.name ?? "") &&
       !scopes.includes("mcp:write")
     ) {
-      res.setHeader("WWW-Authenticate", 'Bearer error="insufficient_scope", scope="mcp:write"');
+      res.setHeader(
+        "WWW-Authenticate",
+        'Bearer error="insufficient_scope", scope="openid mcp:read mcp:write"',
+      );
       send(res, 403, { error: "insufficient_scope" });
       return;
     }
