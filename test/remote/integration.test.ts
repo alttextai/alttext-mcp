@@ -27,6 +27,48 @@ let issuer: string;
 let active = true;
 const connections = new Map<string, string[]>();
 const cookies = new Map<string, { value: string; path: string }>();
+const assistantCallback = "https://assistant.example/callback";
+const vsCodeRedirects = [
+  "https://insiders.vscode.dev/redirect",
+  "https://vscode.dev/redirect",
+  "http://127.0.0.1/",
+  "http://127.0.0.1:33418/",
+];
+const nativeClients: [string, Record<string, unknown>][] = [
+  ["Claude Code", { redirect_uris: ["http://localhost:54212/callback"] }],
+  [
+    "VS Code",
+    {
+      redirect_uris: vsCodeRedirects,
+      client_uri: "https://code.visualstudio.com",
+      application_type: "native",
+    },
+  ],
+  [
+    "Cursor",
+    {
+      redirect_uris: [
+        "cursor://anysphere.cursor-mcp/oauth/callback",
+        "https://www.cursor.com/agents/mcp/oauth/callback",
+        "http://localhost:8787/callback",
+      ],
+    },
+  ],
+  ["Codex", { redirect_uris: ["http://127.0.0.1:61234/callback"] }],
+  ["IPv6 loopback", { redirect_uris: ["http://[::1]:8080/callback"] }],
+];
+async function registerClient(metadata: Record<string, unknown>) {
+  return fetch(`${issuer}/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+      ...metadata,
+    }),
+  });
+}
 async function port() {
   const s = createServer();
   await new Promise<void>((resolve) => s.listen(0, "127.0.0.1", resolve));
@@ -162,6 +204,7 @@ async function authorize(
   scopes = ["mcp:read", "mcp:write"],
   requestedScopes = scopes,
   registrationScopes = requestedScopes,
+  redirect = { registered: [assistantCallback], requested: assistantCallback },
 ) {
   connections.set(connectionId, scopes);
   const discovery = (await (
@@ -173,7 +216,7 @@ async function authorize(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      redirect_uris: ["https://assistant.example/callback"],
+      redirect_uris: redirect.registered,
       client_name: "Example",
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
@@ -187,7 +230,7 @@ async function authorize(
   const auth = new URL(`${issuer}/authorize`);
   Object.entries({
     client_id: client.client_id,
-    redirect_uri: "https://assistant.example/callback",
+    redirect_uri: redirect.requested,
     response_type: "code",
     scope: requestedScopes.join(" "),
     resource: `${issuer}/mcp`,
@@ -213,7 +256,8 @@ async function authorize(
       required(required(railsUrl.searchParams.get("handoff")).split(".")[0]),
       "base64url",
     ).toString(),
-  ) as { return_url: string; interaction_id: string; nonce: string };
+  ) as { return_url: string; interaction_id: string; nonce: string; redirect_host: string };
+  expect(handoff.redirect_host).toBe(new URL(redirect.requested).host);
   const callback = new URL(handoff.return_url);
   Object.entries({
     code: connectionId,
@@ -227,7 +271,7 @@ async function authorize(
   const finished = await browser(new URL(required(resumed.headers.get("location")), issuer).href);
   expect(finished.status, await finished.clone().text()).toBe(303);
   const clientUrl = new URL(required(finished.headers.get("location")), issuer);
-  expect(clientUrl.origin).toBe("https://assistant.example");
+  expect(clientUrl.origin).toBe(new URL(redirect.requested).origin);
   expect(clientUrl.searchParams.get("state")).toBe("host-state");
   const exchange = async (fields: Record<string, string>) =>
     fetch(`${issuer}/token`, {
@@ -241,7 +285,7 @@ async function authorize(
   const tokenResponse = await exchange({
     grant_type: "authorization_code",
     code: required(clientUrl.searchParams.get("code")),
-    redirect_uri: "https://assistant.example/callback",
+    redirect_uri: redirect.requested,
     code_verifier: verifier,
   });
   const token = (await tokenResponse.json()) as TokenReply;
@@ -301,20 +345,58 @@ describe("HTTP OAuth and MCP", () => {
   it("rejects insecure registration and metadata fetch URLs", async () => {
     for (const metadata of [
       { redirect_uris: ["http://evil.example/callback"] },
-      {
-        redirect_uris: ["https://assistant.example/callback"],
-        jwks_uri: "http://169.254.169.254/",
-      },
+      { redirect_uris: ["http://127.0.0.1.evil.example/"] },
+      { redirect_uris: ["http://localhost.evil.example/callback"] },
+      { redirect_uris: ["http://user@127.0.0.1:8080/callback"] },
+      { redirect_uris: ["http://127.0.0.1:8080/callback#fragment"] },
+      { redirect_uris: ["vscode://vscode.github-authentication/did-authenticate"] },
+      { redirect_uris: ["cursor://evil.example/oauth/callback"] },
+      { redirect_uris: ["cursor://anysphere.cursor-mcp/oauth/callback#fragment"] },
+      { redirect_uris: [assistantCallback, "myapp://callback"] },
+      { redirect_uris: [assistantCallback], jwks_uri: "http://169.254.169.254/" },
     ]) {
-      expect(
-        (
-          await fetch(`${issuer}/register`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(metadata),
-          })
-        ).status,
-      ).toBe(400);
+      expect((await registerClient(metadata)).status, JSON.stringify(metadata)).toBe(400);
+    }
+  });
+  it.each(nativeClients)("registers the %s redirect set", async (client_name, metadata) => {
+    const response = await registerClient({ client_name, ...metadata });
+    expect(response.status, await response.text()).toBe(201);
+  });
+  it("accepts any loopback port at authorization time", async () => {
+    const scopes = ["mcp:read", "mcp:write"];
+    const { token } = await authorize("native-loopback", scopes, scopes, scopes, {
+      registered: vsCodeRedirects,
+      requested: "http://127.0.0.1:49152/",
+    });
+    expect((await toolCall(token.access_token)).status).toBe(200);
+  });
+  it("keeps exact matching for HTTPS redirects and loopback paths", async () => {
+    const response = await registerClient({
+      client_name: "VS Code",
+      redirect_uris: vsCodeRedirects,
+    });
+    const client = (await response.json()) as { client_id: string };
+    expect(response.status).toBe(201);
+    for (const redirectUri of [
+      "https://vscode.dev:8443/redirect",
+      "http://127.0.0.1:49152/other",
+      "http://localhost:33418/",
+    ]) {
+      const auth = new URL(`${issuer}/authorize`);
+      Object.entries({
+        client_id: client.client_id,
+        redirect_uri: redirectUri,
+        response_type: "code",
+        scope: "mcp:read",
+        resource: `${issuer}/mcp`,
+        code_challenge: randomBytes(32).toString("base64url"),
+        code_challenge_method: "S256",
+      }).forEach(([k, v]) => {
+        auth.searchParams.set(k, v);
+      });
+      const denied = await browser(auth.href);
+      expect(denied.status, redirectUri).toBe(400);
+      expect(await denied.json()).toEqual({ error: "invalid_redirect_uri" });
     }
   });
   it("keeps concurrent accounts isolated and denies mutations under read scope", async () => {

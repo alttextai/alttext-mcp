@@ -3,6 +3,9 @@ import type { RemoteConfig } from "./config.js";
 import type { OAuthStore } from "./store.js";
 import type { ProductBridge } from "./product-bridge.js";
 
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "[::1]", "localhost"]);
+const APP_REDIRECTS = new Set(["cursor://anysphere.cursor-mcp/oauth/callback"]);
+
 export function createOAuth(
   config: RemoteConfig,
   store: OAuthStore,
@@ -58,19 +61,26 @@ export function createOAuth(
         }
         if (!metadata.redirect_uris?.length || metadata.redirect_uris.length > 10)
           throw new errors.InvalidClientMetadata("redirect_uris required");
+        let native = false;
         for (const value of metadata.redirect_uris) {
           const url = new URL(value);
+          const loopback = url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname);
+          const app = APP_REDIRECTS.has(value);
           if (
             url.hash ||
             url.username ||
             url.password ||
             value.includes("*") ||
-            (url.protocol !== "https:" &&
-              !(config.testing && url.protocol === "http:" && url.hostname === "127.0.0.1"))
+            (url.protocol !== "https:" && !loopback && !app)
           ) {
-            throw new errors.InvalidClientMetadata("HTTPS redirects without wildcards required");
+            throw new errors.InvalidClientMetadata(
+              "HTTPS, loopback, or supported app redirects required",
+            );
           }
+          native ||= loopback || app;
         }
+        // oidc-provider only ignores the loopback port (RFC 8252 7.3) for native clients
+        if (native) metadata.application_type = "native";
         if (
           metadata.grant_types?.some(
             (type) => !["authorization_code", "refresh_token"].includes(type),
