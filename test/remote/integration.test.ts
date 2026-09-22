@@ -161,6 +161,7 @@ async function authorize(
   connectionId = "grant-one",
   scopes = ["mcp:read", "mcp:write"],
   requestedScopes = scopes,
+  registrationScopes = requestedScopes,
 ) {
   connections.set(connectionId, scopes);
   const discovery = (await (
@@ -177,7 +178,7 @@ async function authorize(
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       token_endpoint_auth_method: "none",
-      scope: requestedScopes.join(" "),
+      scope: registrationScopes.join(" "),
     }),
   });
   const client = (await registration.json()) as { client_id: string };
@@ -356,6 +357,14 @@ describe("HTTP OAuth and MCP", () => {
   });
   it("supports OpenID discovery while granting the MCP resource scopes", async () => {
     const { token } = await authorize("openai-scan", ["mcp:read", "mcp:write"], ["openid"]);
+    expect(token.id_token).toBeTypeOf("string");
+    expect((await toolCall(token.access_token)).status).toBe(200);
+  });
+  it("adds OpenID support to clients registered before it was advertised", async () => {
+    const scopes = ["openid", "mcp:read", "mcp:write"];
+    const { token } = await authorize("existing-openai-client", ["mcp:read", "mcp:write"], scopes, [
+      "mcp:read",
+    ]);
     expect(token.id_token).toBeTypeOf("string");
     expect((await toolCall(token.access_token)).status).toBe(200);
   });
