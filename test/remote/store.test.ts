@@ -45,10 +45,43 @@ describe("durable OAuth adapter", () => {
     expect(await redis.ttl("test:index:Client:uid:client-uid")).toBe(-1);
     expect(await adapter.findByUid("client-uid")).toMatchObject({
       clientId: "client",
-      scope: "openid mcp:read mcp:write",
+      scope: "mcp:read mcp:write",
     });
     await adapter.destroy("client");
     expect(await adapter.findByUid("client-uid")).toBeUndefined();
+  });
+  it("keeps expanding a legacy ChatGPT client record after it is saved again", async () => {
+    const adapter = store.adapter("Client");
+    const chatGpt = {
+      clientId: "legacy",
+      scope: "mcp:read",
+      redirect_uris: ["https://chatgpt.com/connector_platform_oauth_redirect"],
+    };
+    await adapter.upsert("legacy", chatGpt);
+    await redis.hDel("test:Client:legacy", "scopes_v");
+    await adapter.upsert("legacy", chatGpt);
+    expect(await adapter.find("legacy")).toMatchObject({ scope: "openid mcp:read mcp:write" });
+  });
+  it("leaves other legacy clients at the scope they registered", async () => {
+    const adapter = store.adapter("Client");
+    for (const [id, redirect] of [
+      ["legacy-other", "https://assistant.example/callback"],
+      ["legacy-lookalike", "https://chatgpt.com.evil.example/callback"],
+      ["legacy-http", "http://chatgpt.com/callback"],
+    ] as const) {
+      await adapter.upsert(id, { clientId: id, scope: "mcp:read", redirect_uris: [redirect] });
+      await redis.hDel(`test:Client:${id}`, "scopes_v");
+      expect(await adapter.find(id), redirect).toMatchObject({ scope: "mcp:read" });
+    }
+    await adapter.upsert("legacy-platform", {
+      clientId: "legacy-platform",
+      scope: "mcp:read",
+      redirect_uris: ["https://platform.openai.com/apps-manage/oauth"],
+    });
+    await redis.hDel("test:Client:legacy-platform", "scopes_v");
+    expect(await adapter.find("legacy-platform")).toMatchObject({
+      scope: "openid mcp:read mcp:write",
+    });
   });
 
   it("rejects ciphertext moved to a different grant record", async () => {
