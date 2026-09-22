@@ -36,10 +36,17 @@ afterAll(async () => {
 describe("durable OAuth adapter", () => {
   it("keeps non-expiring client records and their indexes persistent", async () => {
     const adapter = store.adapter("Client");
-    await adapter.upsert("client", { uid: "client-uid", clientId: "client" });
+    await adapter.upsert("client", {
+      uid: "client-uid",
+      clientId: "client",
+      scope: "mcp:read mcp:write",
+    });
     expect(await redis.ttl("test:Client:client")).toBe(-1);
     expect(await redis.ttl("test:index:Client:uid:client-uid")).toBe(-1);
-    expect((await adapter.findByUid("client-uid"))?.clientId).toBe("client");
+    expect(await adapter.findByUid("client-uid")).toMatchObject({
+      clientId: "client",
+      scope: "openid mcp:read mcp:write",
+    });
     await adapter.destroy("client");
     expect(await adapter.findByUid("client-uid")).toBeUndefined();
   });

@@ -36,6 +36,10 @@ export class OAuthStore {
       const record = await this.redis.hGetAll(key(id));
       if (!record["payload"]) return undefined;
       const value = this.decrypt(record["payload"], key(id));
+      if (model === "Client") {
+        const scopes = typeof value.scope === "string" ? value.scope.split(" ") : [];
+        value.scope = [...new Set(["openid", ...scopes])].join(" ");
+      }
       if (record["consumed"]) value.consumed = Number(record["consumed"]);
       return value;
     };
