@@ -16,6 +16,7 @@ function required(value: string | null | undefined): string {
 }
 interface TokenReply {
   access_token: string;
+  id_token?: string;
   refresh_token: string;
 }
 let redisProcess: ChildProcess;
@@ -156,7 +157,11 @@ afterAll(async () => {
   redisProcess.kill();
 });
 
-async function authorize(connectionId = "grant-one", scopes = ["mcp:read", "mcp:write"]) {
+async function authorize(
+  connectionId = "grant-one",
+  scopes = ["mcp:read", "mcp:write"],
+  requestedScopes = scopes,
+) {
   connections.set(connectionId, scopes);
   const discovery = (await (
     await fetch(`${issuer}/.well-known/oauth-authorization-server`)
@@ -172,7 +177,7 @@ async function authorize(connectionId = "grant-one", scopes = ["mcp:read", "mcp:
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       token_endpoint_auth_method: "none",
-      scope: scopes.join(" "),
+      scope: requestedScopes.join(" "),
     }),
   });
   const client = (await registration.json()) as { client_id: string };
@@ -183,7 +188,7 @@ async function authorize(connectionId = "grant-one", scopes = ["mcp:read", "mcp:
     client_id: client.client_id,
     redirect_uri: "https://assistant.example/callback",
     response_type: "code",
-    scope: scopes.join(" "),
+    scope: requestedScopes.join(" "),
     resource: `${issuer}/mcp`,
     code_challenge: createHash("sha256").update(verifier).digest("base64url"),
     code_challenge_method: "S256",
@@ -348,5 +353,10 @@ describe("HTTP OAuth and MCP", () => {
       refresh_token: token.refresh_token,
     });
     expect(replay.status).toBe(400);
+  });
+  it("supports OpenID discovery while granting the MCP resource scopes", async () => {
+    const { token } = await authorize("openai-scan", ["mcp:read", "mcp:write"], ["openid"]);
+    expect(token.id_token).toBeTypeOf("string");
+    expect((await toolCall(token.access_token)).status).toBe(200);
   });
 });
