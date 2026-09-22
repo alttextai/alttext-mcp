@@ -261,6 +261,13 @@ async function toolCall(token: string, name = "whoami") {
 }
 
 describe("HTTP OAuth and MCP", () => {
+  it("serves the OpenAI plugin domain-verification challenge", async () => {
+    const response = await fetch(`${issuer}/.well-known/openai-apps-challenge`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/plain");
+    expect(await response.text()).toBe("PlUuJJowjOgZmLFWv_wfh-9vnZDPkIcgxyaP-82wOqw");
+  });
+
   it("rejects unauthenticated requests and untrusted transport headers", async () => {
     const response = await fetch(`${issuer}/mcp`, { method: "POST" });
     expect(response.status).toBe(401);
