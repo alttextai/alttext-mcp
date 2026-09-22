@@ -38,7 +38,7 @@ export class OAuthStore {
       const value = this.decrypt(record["payload"], key(id));
       if (model === "Client") {
         const scopes = typeof value.scope === "string" ? value.scope.split(" ") : [];
-        value.scope = [...new Set(["openid", ...scopes])].join(" ");
+        value.scope = [...new Set(["openid", "mcp:read", "mcp:write", ...scopes])].join(" ");
       }
       if (record["consumed"]) value.consumed = Number(record["consumed"]);
       return value;
