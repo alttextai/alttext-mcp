@@ -36,7 +36,8 @@ export class OAuthStore {
       const record = await this.redis.hGetAll(key(id));
       if (!record["payload"]) return undefined;
       const value = this.decrypt(record["payload"], key(id));
-      if (model === "Client") {
+      // unmarked clients predate openid and mcp:write and got mcp:read from clientDefaults
+      if (model === "Client" && record["scopes_v"] !== "2") {
         const scopes = typeof value.scope === "string" ? value.scope.split(" ") : [];
         value.scope = [...new Set(["openid", "mcp:read", "mcp:write", ...scopes])].join(" ");
       }
@@ -49,6 +50,8 @@ export class OAuthStore {
         const previous = await find(id);
         const tx = this.redis.multi().hSet(key(id), "payload", this.encrypt(payload, key(id)));
         if (ttl !== undefined) tx.expire(key(id), ttl);
+        // marking only new records keeps a re-saved legacy client from narrowing to mcp:read
+        if (model === "Client" && !previous) tx.hSet(key(id), "scopes_v", "2");
         for (const field of ["uid", "userCode"] as const) {
           const value = payload[field];
           const oldValue = previous?.[field];

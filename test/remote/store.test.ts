@@ -45,10 +45,17 @@ describe("durable OAuth adapter", () => {
     expect(await redis.ttl("test:index:Client:uid:client-uid")).toBe(-1);
     expect(await adapter.findByUid("client-uid")).toMatchObject({
       clientId: "client",
-      scope: "openid mcp:read mcp:write",
+      scope: "mcp:read mcp:write",
     });
     await adapter.destroy("client");
     expect(await adapter.findByUid("client-uid")).toBeUndefined();
+  });
+  it("keeps expanding a legacy client record after it is saved again", async () => {
+    const adapter = store.adapter("Client");
+    await adapter.upsert("legacy", { clientId: "legacy", scope: "mcp:read" });
+    await redis.hDel("test:Client:legacy", "scopes_v");
+    await adapter.upsert("legacy", { clientId: "legacy", scope: "mcp:read" });
+    expect(await adapter.find("legacy")).toMatchObject({ scope: "openid mcp:read mcp:write" });
   });
 
   it("rejects ciphertext moved to a different grant record", async () => {
