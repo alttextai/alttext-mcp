@@ -2,6 +2,21 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import type { RedisClientType } from "redis";
 import type { Adapter, AdapterPayload } from "oidc-provider";
 
+const OPENAI_HOSTS = ["chatgpt.com", "openai.com"];
+
+function isOpenAIClient(client: AdapterPayload): boolean {
+  const uris: unknown = client.redirect_uris;
+  if (!Array.isArray(uris)) return false;
+  return uris.some((value) => {
+    if (typeof value !== "string" || !URL.canParse(value)) return false;
+    const url = new URL(value);
+    return (
+      url.protocol === "https:" &&
+      OPENAI_HOSTS.some((host) => url.hostname === host || url.hostname.endsWith(`.${host}`))
+    );
+  });
+}
+
 export class OAuthStore {
   constructor(
     readonly redis: RedisClientType,
@@ -36,8 +51,8 @@ export class OAuthStore {
       const record = await this.redis.hGetAll(key(id));
       if (!record["payload"]) return undefined;
       const value = this.decrypt(record["payload"], key(id));
-      // unmarked clients predate openid and mcp:write and got mcp:read from clientDefaults
-      if (model === "Client" && record["scopes_v"] !== "2") {
+      // the cached ChatGPT client predates openid and mcp:write; other legacy clients keep what they registered
+      if (model === "Client" && record["scopes_v"] !== "2" && isOpenAIClient(value)) {
         const scopes = typeof value.scope === "string" ? value.scope.split(" ") : [];
         value.scope = [...new Set(["openid", "mcp:read", "mcp:write", ...scopes])].join(" ");
       }
