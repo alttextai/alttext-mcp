@@ -11,6 +11,7 @@ interface Handoff {
   nonce: string;
   scopes: string[];
 }
+const OPENAI_APPS_CHALLENGE = "PlUuJJowjOgZmLFWv_wfh-9vnZDPkIcgxyaP-82wOqw";
 export interface Catalog {
   create: (apiKey: string) => McpServer;
   readTools: Set<string>;
@@ -70,6 +71,14 @@ export function createHttp(
     }
     if (Number(req.headers["content-length"] ?? 0) > 1_048_576) {
       send(res, 413, { error: "request_too_large" });
+      return;
+    }
+    if (url.pathname === "/.well-known/openai-apps-challenge") {
+      res.writeHead(200, {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-store",
+      });
+      res.end(OPENAI_APPS_CHALLENGE);
       return;
     }
     if (
