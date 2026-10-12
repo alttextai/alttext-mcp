@@ -11,5 +11,6 @@ export default defineConfig({
   clean: true,
   removeNodeProtocol: false,
   noExternal: ["@alttext_ai/core"],
+  external: ["@napi-rs/keyring"],
   define: { __VERSION__: JSON.stringify(version) },
 });

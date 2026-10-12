@@ -57,6 +57,18 @@ describe("AltTextApi", () => {
         }),
       );
     });
+
+    it("names the calling client in the X-Client header", async () => {
+      const cliApi = new AltTextApi(API_KEY, undefined, "1.0.0", "alttext-cli");
+      fetchMock.mockResolvedValueOnce(jsonResponse({ name: "Test" }));
+      await cliApi.getAccount();
+      expect(fetchMock).toHaveBeenCalledWith(
+        `${BASE_URL}/account`,
+        expect.objectContaining({
+          headers: expect.objectContaining({ "X-Client": "alttext-cli/1.0.0" }) as unknown,
+        }),
+      );
+    });
   });
 
   describe("createImage", () => {

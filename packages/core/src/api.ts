@@ -51,10 +51,10 @@ export class AltTextApi {
   private readonly baseUrl: string;
   private readonly clientHeader: string;
 
-  constructor(apiKey: string, baseUrl?: string, version?: string) {
+  constructor(apiKey: string, baseUrl?: string, version?: string, client = "mcp-server") {
     this.apiKey = apiKey;
     this.baseUrl = (baseUrl ?? "https://alttext.ai/api/v1").replace(/\/+$/, "");
-    this.clientHeader = `mcp-server/${version ?? "unknown"}`;
+    this.clientHeader = `${client}/${version ?? "unknown"}`;
   }
 
   async getAccount(): Promise<AccountRecord> {
