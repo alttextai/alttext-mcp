@@ -30,7 +30,7 @@ const usageLimit = z
   .describe("Credits this key may use per billing period; null means unlimited");
 
 const BILLING_NOTE =
-  "billable_credits is the uncapped figure to bill; previous_period holds the last closed period, and billable_complete false there means it can be low";
+  "billable_credits is uncapped; billable_complete false means the figure may undercount. previous_period is the latest closure, which may be a revocation rather than last month. For historical billing use detail full, match credit_history period_start/period_end to the requested interval, and verify completeness";
 const CONFIRM_NOTE =
   "First confirm the key by name and id with the person, and check get_api_key's integration field: an integration key stops working until it reconnects";
 

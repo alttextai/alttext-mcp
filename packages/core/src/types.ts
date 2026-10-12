@@ -60,6 +60,7 @@ export interface ApiKeyRecord {
   readonly token?: string | null;
   readonly token_hint?: string | null;
   readonly usage_limit?: number | null;
+  readonly billable_complete?: boolean | null;
   readonly integration_warning?: string;
   readonly [field: string]: unknown;
 }

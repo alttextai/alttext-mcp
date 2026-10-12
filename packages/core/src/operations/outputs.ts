@@ -78,6 +78,7 @@ export const maskedApiKeySchema = z.object({
   usage_limit: z.number().nullish(),
   credits_used: z.number().nullish(),
   billable_credits: z.number().nullish(),
+  billable_complete: z.boolean().nullish(),
   period_start: z.string().nullish(),
   resets_at: z.string().nullish(),
   previous_period: z

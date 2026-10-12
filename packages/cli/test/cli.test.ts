@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { operations, VERSION } from "@alttext_ai/core";
 import { buildProgram, run } from "../src/commands/program.js";
-import { credentialsPath } from "../src/credentials.js";
+import { credentialsPath, resolveCredential, storeCredential } from "../src/credentials.js";
 import {
   ACCOUNT,
   fakeKeychain,
@@ -16,6 +17,8 @@ import {
 } from "./helpers.js";
 
 const ENV_KEY = { ALTTEXT_API_KEY: "atai_envkey" };
+
+vi.mock("node:fs/promises", { spy: true });
 
 function outputSchema(name: string) {
   const operation = operations.find((item) => item.name === name);
@@ -36,6 +39,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("login", () => {
@@ -106,6 +110,45 @@ describe("login", () => {
     expect(statSync(credentialsPath(io.env, io.homedir)).mode & 0o777).toBe(0o600);
   });
 
+  it("keeps the previous file credential when a replacement write is interrupted", async () => {
+    const io = testIo();
+    await storeCredential(io, "atai_previous");
+    const path = credentialsPath(io.env, io.homedir);
+    const original = readFileSync(path, "utf8");
+    const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+    vi.mocked(writeFile).mockImplementationOnce(async (file, _contents, options) => {
+      await actual.writeFile(file, "", options);
+      throw new Error("disk full during write");
+    });
+
+    await expect(storeCredential(io, "atai_replacement")).rejects.toThrow("disk full");
+    expect(readFileSync(path, "utf8")).toBe(original);
+    expect(await resolveCredential(io)).toEqual({ apiKey: "atai_previous", source: "file" });
+    expect(statSync(path).mode & 0o777).toBe(0o600);
+    expect(readdirSync(dirname(path))).toEqual(["credentials"]);
+  });
+
+  it("keeps the latest fallback login active when the old keychain becomes readable", async () => {
+    const keychain = fakeKeychain("atai_previous_account");
+    keychain.set = () => {
+      throw new Error("locked");
+    };
+    const io = testIo({ stdin: "atai_new_account", keychain });
+    const fetchMock = mockApi({ "GET /account": json(ACCOUNT) });
+
+    expect(await run(["login"], io)).toBe(0);
+    expect(await run(["whoami", "--json"], io)).toBe(0);
+    expect(headersOf(fetchMock, 1)["X-API-Key"]).toBe("atai_new_account");
+
+    keychain.set = (token) => {
+      keychain.value = token;
+    };
+    expect(await run(["login"], io)).toBe(0);
+    expect(existsSync(credentialsPath(io.env, io.homedir))).toBe(false);
+    expect(await run(["whoami", "--json"], io)).toBe(0);
+    expect(headersOf(fetchMock, 3)["X-API-Key"]).toBe("atai_new_account");
+  });
+
   it("defaults the credentials file to ~/.config without XDG_CONFIG_HOME", () => {
     expect(credentialsPath({}, "/home/ana")).toBe("/home/ana/.config/alttext/credentials");
   });
@@ -117,6 +160,20 @@ describe("login", () => {
 });
 
 describe("logout", () => {
+  it("reports a keychain initialization failure even when fallback cleanup succeeds", async () => {
+    const keychain = fakeKeychain("atai_previous");
+    const io = testIo({ keychain });
+    writeCredentialsFile(io.env["XDG_CONFIG_HOME"] ?? "", "atai_file");
+    io.loadKeychain = () => Promise.reject(new Error("backend temporarily unavailable"));
+    expect(await run(["logout"], io)).toBe(1);
+    expect(io.err()).toMatch(/keychain.*logout/i);
+    expect(existsSync(credentialsPath(io.env, io.homedir))).toBe(false);
+    io.loadKeychain = () => Promise.resolve(keychain);
+    expect(await resolveCredential(io)).toEqual({ apiKey: "atai_previous", source: "keychain" });
+    expect(await run(["logout"], io)).toBe(0);
+    expect(await resolveCredential(io)).toBeNull();
+  });
+
   it("removes the keychain entry and the credentials file", async () => {
     const keychain = fakeKeychain("atai_stored");
     const io = testIo({ keychain });
@@ -124,6 +181,20 @@ describe("logout", () => {
 
     expect(await run(["logout"], io)).toBe(0);
     expect(keychain.value).toBeNull();
+    expect(existsSync(credentialsPath(io.env, io.homedir))).toBe(false);
+  });
+
+  it("reports failed keychain removal instead of successful logout", async () => {
+    const keychain = fakeKeychain("atai_stored");
+    keychain.remove = () => {
+      throw new Error("locked");
+    };
+    const io = testIo({ keychain });
+    writeCredentialsFile(io.env["XDG_CONFIG_HOME"] ?? "", "atai_file");
+
+    expect(await run(["logout"], io)).toBe(1);
+    expect(io.out()).not.toContain("Logged out");
+    expect(io.err()).toMatch(/keychain.*logout/i);
     expect(existsSync(credentialsPath(io.env, io.homedir))).toBe(false);
   });
 });

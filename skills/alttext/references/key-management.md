@@ -49,12 +49,13 @@ alttext keys list --status all --all --json
 
 `--status all` includes keys revoked during the month, which still have usage to bill. `--all` follows every page. Each entry in `api_keys` carries:
 
-- `billable_credits`: credits charged through the key in the current period, uncapped, including charges that went past the key's limit.
+- `billable_credits`: uncapped credits charged through the key in its current period, including in-flight charges beyond the usage limit.
+- `billable_complete`: whether that current total is complete. False means older charging code may have missed charges, including during the deployment window; verify before billing.
 - `period_start` and `resets_at`: the current period's bounds.
-- `previous_period.billable_credits`: credits charged in the last closed period. `previous_period.recorded_at` says when that period closed.
-- `previous_period.billable_complete`: `false` means the period was recorded before billable counting existed and may undercount. Tell the person when a figure comes from an incomplete period.
+- `previous_period.billable_credits`: the latest closed total, with closure time in `recorded_at`. This may be a midmonth revocation, so do not assume it is last month.
+- `previous_period.billable_complete`: false means this total may undercount; report that limitation.
 
-For "last month", use `previous_period.billable_credits`, and say which period it covers from `recorded_at` and the current `period_start`. For older periods, `alttext keys get 42 --detail full --json` adds the key's credit periods.
+For historical billing, fetch `alttext keys get 42 --detail full --json`. Each `usage.credit_history` entry carries `period_start`, `period_end`, uncapped `billable_credits` and `billable_complete`. Match those explicit bounds to the requested billing interval. Include revoked keys and their final partial period. If boundaries are unknown or completeness is false, flag the figure for verification instead of presenting it as a complete invoice total. Do not substitute capped `credits`, assume the latest closure means last month, or prorate periods that overlap a different calendar interval.
 
 Report a table of client name, key ID, status and billable credits. The figures are AltText.ai credits; the person sets their own price per credit.
 

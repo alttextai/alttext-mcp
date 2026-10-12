@@ -1,4 +1,5 @@
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Io, Keychain } from "./io.js";
 
@@ -22,7 +23,7 @@ async function keychainOf(io: Io): Promise<Keychain | null> {
   }
 }
 
-async function readFileKey(path: string): Promise<string | null> {
+async function readFileKey(path: string): Promise<{ apiKey: string; preferred: boolean } | null> {
   let contents: string;
   try {
     contents = await readFile(path, "utf8");
@@ -37,13 +38,20 @@ async function readFileKey(path: string): Promise<string | null> {
     return null;
   }
   if (typeof parsed !== "object" || parsed === null || !("api_key" in parsed)) return null;
-  return typeof parsed.api_key === "string" && parsed.api_key !== "" ? parsed.api_key : null;
+  if (typeof parsed.api_key !== "string" || parsed.api_key === "") return null;
+  return {
+    apiKey: parsed.api_key,
+    preferred: "source" in parsed && parsed.source === "file",
+  };
 }
 
-/** precedence: ALTTEXT_API_KEY, then the OS keychain, then the credentials file */
+/** the latest fallback login stays active even when an older keychain entry unlocks */
 export async function resolveCredential(io: Io): Promise<Credential | null> {
   const fromEnv = io.env["ALTTEXT_API_KEY"];
   if (fromEnv) return { apiKey: fromEnv, source: "env" };
+
+  const fromFile = await readFileKey(credentialsPath(io.env, io.homedir));
+  if (fromFile?.preferred) return { apiKey: fromFile.apiKey, source: "file" };
 
   const keychain = await keychainOf(io);
   if (keychain) {
@@ -55,14 +63,21 @@ export async function resolveCredential(io: Io): Promise<Credential | null> {
     }
   }
 
-  const fromFile = await readFileKey(credentialsPath(io.env, io.homedir));
-  return fromFile === null ? null : { apiKey: fromFile, source: "file" };
+  return fromFile === null ? null : { apiKey: fromFile.apiKey, source: "file" };
 }
 
 async function writeCredentialsFile(path: string, apiKey: string): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  await writeFile(path, `${JSON.stringify({ api_key: apiKey })}\n`, { mode: 0o600 });
-  await chmod(path, 0o600);
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, `${JSON.stringify({ api_key: apiKey, source: "file" })}\n`, {
+      mode: 0o600,
+      flag: "wx",
+    });
+    await rename(temporary, path);
+  } finally {
+    await rm(temporary, { force: true });
+  }
 }
 
 /** falls back to the 0600 file when no keychain works */
@@ -84,16 +99,20 @@ export async function storeCredential(io: Io, apiKey: string): Promise<"keychain
 
 export async function removeCredentials(io: Io): Promise<("keychain" | "file")[]> {
   const removed: ("keychain" | "file")[] = [];
-  const keychain = await keychainOf(io);
-  if (keychain) {
-    try {
-      if (keychain.remove()) removed.push("keychain");
-    } catch {
-      // nothing stored there, or no keychain service
-    }
+  let keychainFailed = false;
+  try {
+    const keychain = await io.loadKeychain();
+    if (keychain?.remove()) removed.push("keychain");
+  } catch {
+    keychainFailed = true;
   }
   const path = credentialsPath(io.env, io.homedir);
   if ((await readFileKey(path).catch(() => null)) !== null) removed.push("file");
   await rm(path, { force: true });
+  if (keychainFailed) {
+    throw new Error(
+      "Could not remove the OS keychain credential. Unlock the keychain and run logout again.",
+    );
+  }
   return removed;
 }

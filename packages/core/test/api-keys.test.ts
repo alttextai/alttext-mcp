@@ -133,6 +133,33 @@ describe("list_api_keys", () => {
 });
 
 describe("get_api_key", () => {
+  it("preserves incomplete current and historical billing flags without leaking tokens", async () => {
+    const period = {
+      billable_credits: 140,
+      billable_complete: false,
+      period_start: "2026-09-01T00:00:00Z",
+      period_end: "2026-10-01T00:00:00Z",
+      starts_on: "2026-09-01",
+      ends_on: "2026-10-01",
+      credits: 100,
+    };
+    fetchMock.mockResolvedValueOnce(
+      json(
+        keyRow(7, {
+          billable_complete: false,
+          usage: { credit_history: [period] },
+        }),
+      ),
+    );
+    const result = await runOperation(operation("get_api_key"), api, { id: 7, detail: "full" });
+    expect(result.structured).toMatchObject({
+      billable_complete: false,
+      usage: { credit_history: [period] },
+    });
+    expect(result.text).toContain("incomplete");
+    expect(JSON.stringify(result.structured)).not.toContain("atai_");
+  });
+
   it("returns the key without its token", async () => {
     fetchMock.mockResolvedValueOnce(json(keyRow(7)));
 

@@ -22,9 +22,9 @@ alttext login
 alttext login < key.txt
 ```
 
-The key goes into the OS keychain. When no keychain is available, it goes into `$XDG_CONFIG_HOME/alttext/credentials` (default `~/.config/alttext/credentials`), readable only by you. There is no flag for passing a key on the command line, since command lines end up in shell history and process lists.
+The key goes into the OS keychain. When no keychain is available, it goes into `$XDG_CONFIG_HOME/alttext/credentials` (default `~/.config/alttext/credentials`), readable only by you. A successful fallback login remains the active credential even if an older keychain entry becomes available again. A later successful keychain login clears the fallback file. There is no flag for passing a key on the command line, since command lines end up in shell history and process lists.
 
-`ALTTEXT_API_KEY` overrides the stored key for any command, which suits CI. `alttext logout` removes the stored key from both places.
+`ALTTEXT_API_KEY` overrides the stored key for any command, which suits CI. `alttext logout` removes the stored key from both places. If the keychain cannot be cleared, logout fails and asks you to unlock it and retry.
 
 ```sh
 alttext whoami
@@ -91,11 +91,13 @@ NEW_TOKEN=$(alttext keys rotate 42 --yes) # the old token stops working now
 alttext keys history 42                   # see who changed the key and when
 ```
 
-Bill a month from a script:
+Inspect current billing usage from a script:
 
 ```sh
-alttext keys list --status all --all --json | jq '.api_keys[] | {name, billable_credits}'
+alttext keys list --status all --all --json | jq '.api_keys[] | {name, billable_credits, billable_complete, period_start, resets_at}'
 ```
+
+For a historical month, fetch `alttext keys get 42 --detail full --json` and match `usage.credit_history` entries by `period_start` and `period_end`. Use `billable_credits` only with verified completeness. The latest closed period may be a midmonth revocation; the capped `credits` field is not a billing total.
 
 Change a client's limit, or remove it:
 

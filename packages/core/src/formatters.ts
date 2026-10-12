@@ -150,6 +150,8 @@ export function formatApiKey(
     lines.push(`Credits used: ${String(key["credits_used"])}`);
   if (typeof key["billable_credits"] === "number")
     lines.push(`Billable credits: ${String(key["billable_credits"])}`);
+  if (key.billable_complete === false)
+    lines.push("Warning: billable credits are incomplete; verify before billing.");
   if (typeof key["last_used_at"] === "string") lines.push(`Last used: ${key["last_used_at"]}`);
   if (typeof key["revoked_at"] === "string") lines.push(`Revoked: ${key["revoked_at"]}`);
   if (key.integration_warning) lines.push(`Warning: ${key.integration_warning}`);

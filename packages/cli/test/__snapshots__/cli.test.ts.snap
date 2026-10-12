@@ -370,13 +370,18 @@ Global Options:
 
 Commands:
   list [options]          List the account's site API keys with usage and limits. Tokens are masked
-                          to their last four characters. billable_credits is the uncapped figure to
-                          bill; previous_period holds the last closed period, and billable_complete
-                          false there means it can be low. status "all" includes revoked keys
+                          to their last four characters. billable_credits is uncapped;
+                          billable_complete false means the figure may undercount. previous_period
+                          is the latest closure, which may be a revocation rather than last month.
+                          For historical billing use detail full, match credit_history
+                          period_start/period_end to the requested interval, and verify
+                          completeness. status "all" includes revoked keys
   get [options] <id>      Get one API key's details, usage and limit. The token is masked; use
-                          reveal_api_key_token to see it. billable_credits is the uncapped figure to
-                          bill; previous_period holds the last closed period, and billable_complete
-                          false there means it can be low
+                          reveal_api_key_token to see it. billable_credits is uncapped;
+                          billable_complete false means the figure may undercount. previous_period
+                          is the latest closure, which may be a revocation rather than last month.
+                          For historical billing use detail full, match credit_history
+                          period_start/period_end to the requested interval, and verify completeness
   reveal <id>             Show one API key's full token. The reveal is recorded in the key's
                           history. Only use when the person asks for this key's token
   create [options]        Create a site API key, optionally with a per-period credit limit. Returns
@@ -421,8 +426,10 @@ exports[`help > keys get --help matches its snapshot 1`] = `
 "Usage: alttext keys get [options] <id>
 
 Get one API key's details, usage and limit. The token is masked; use reveal_api_key_token to see it.
-billable_credits is the uncapped figure to bill; previous_period holds the last closed period, and
-billable_complete false there means it can be low
+billable_credits is uncapped; billable_complete false means the figure may undercount.
+previous_period is the latest closure, which may be a revocation rather than last month. For
+historical billing use detail full, match credit_history period_start/period_end to the requested
+interval, and verify completeness
 
 Arguments:
   id                The API key's ID
@@ -469,8 +476,10 @@ exports[`help > keys list --help matches its snapshot 1`] = `
 "Usage: alttext keys list [options]
 
 List the account's site API keys with usage and limits. Tokens are masked to their last four
-characters. billable_credits is the uncapped figure to bill; previous_period holds the last closed
-period, and billable_complete false there means it can be low. status "all" includes revoked keys
+characters. billable_credits is uncapped; billable_complete false means the figure may undercount.
+previous_period is the latest closure, which may be a revocation rather than last month. For
+historical billing use detail full, match credit_history period_start/period_end to the requested
+interval, and verify completeness. status "all" includes revoked keys
 
 Options:
   --after <value>   Cursor from a previous page's next_cursor
