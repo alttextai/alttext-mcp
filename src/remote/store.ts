@@ -4,7 +4,7 @@ import type { Adapter, AdapterPayload } from "oidc-provider";
 
 const OPENAI_HOSTS = ["chatgpt.com", "openai.com"];
 
-function isOpenAIClient(client: AdapterPayload): boolean {
+export function isOpenAIClient(client: AdapterPayload): boolean {
   const uris: unknown = client.redirect_uris;
   if (!Array.isArray(uris)) return false;
   return uris.some((value) => {
@@ -51,8 +51,9 @@ export class OAuthStore {
       const record = await this.redis.hGetAll(key(id));
       if (!record["payload"]) return undefined;
       const value = this.decrypt(record["payload"], key(id));
-      // the cached ChatGPT client predates openid and mcp:write; other legacy clients keep what they registered
-      if (model === "Client" && record["scopes_v"] !== "2" && isOpenAIClient(value)) {
+      // ChatGPT registers some clients read-only, which would reject the write step-up our challenge asks for;
+      // consent still decides what is granted. Other clients keep what they registered
+      if (model === "Client" && isOpenAIClient(value)) {
         const scopes = typeof value.scope === "string" ? value.scope.split(" ") : [];
         value.scope = [...new Set(["openid", "mcp:read", "mcp:write", ...scopes])].join(" ");
       }

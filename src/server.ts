@@ -96,8 +96,21 @@ function toGenerateOptions(args: Record<string, unknown>): GenerateOptions {
   return opts as GenerateOptions;
 }
 
-export function createServer(api: AltTextApi, options: { localFiles?: boolean } = {}): McpServer {
+export function createServer(
+  api: AltTextApi,
+  options: { localFiles?: boolean; toolMeta?: (name: string) => Record<string, unknown> } = {},
+): McpServer {
   const server = new McpServer({ name: "alttext-ai", version });
+  const { toolMeta } = options;
+  if (toolMeta) {
+    const register = server.registerTool.bind(server);
+    server.registerTool = ((name, config, callback) =>
+      register(
+        name,
+        { ...config, _meta: { ...config._meta, ...toolMeta(name) } },
+        callback,
+      )) as typeof server.registerTool;
+  }
 
   // ============================================================
   // Account Management

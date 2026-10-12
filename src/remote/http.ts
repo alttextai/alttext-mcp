@@ -5,7 +5,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RemoteConfig } from "./config.js";
 import { type Connection, ProductBridge, signHandoff } from "./product-bridge.js";
-import type { OAuthStore } from "./store.js";
+import { isOpenAIClient, type OAuthStore } from "./store.js";
 
 interface Handoff {
   nonce: string;
@@ -294,16 +294,33 @@ export function createHttp(
       send(res, 400, { error: "invalid_request" });
       return;
     }
-    const request = body as { method?: string; params?: { name?: string } };
+    const request = body as { id?: unknown; method?: string; params?: { name?: string } };
     if (
       request.method === "tools/call" &&
       !catalog.readTools.has(request.params?.name ?? "") &&
       !scopes.includes("mcp:write")
     ) {
-      res.setHeader(
-        "WWW-Authenticate",
-        'Bearer error="insufficient_scope", scope="openid mcp:read mcp:write"',
-      );
+      const challenge = `Bearer resource_metadata="${config.issuer}/.well-known/oauth-protected-resource/mcp", error="insufficient_scope", error_description="Reconnect AltText.ai and allow write access to use this tool", scope="openid mcp:read mcp:write"`;
+      const client = await oauth.Client.find(String(token.clientId));
+      // ChatGPT ignores an HTTP 403 and only re-links with the scope named in a tool-result challenge
+      if (client && isOpenAIClient(client.metadata())) {
+        send(res, 200, {
+          jsonrpc: "2.0",
+          id: request.id ?? null,
+          result: {
+            content: [
+              {
+                type: "text",
+                text: "This tool needs write access. Reconnect AltText.ai to allow it.",
+              },
+            ],
+            isError: true,
+            _meta: { "mcp/www_authenticate": [challenge] },
+          },
+        });
+        return;
+      }
+      res.setHeader("WWW-Authenticate", challenge);
       send(res, 403, { error: "insufficient_scope" });
       return;
     }

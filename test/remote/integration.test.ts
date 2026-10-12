@@ -573,6 +573,51 @@ describe("HTTP OAuth and MCP", () => {
     expect(stepUp.token.id_token).toBeTypeOf("string");
     expect((await toolCall(stepUp.token.access_token)).status).toBe(200);
   });
+  it("lets a ChatGPT client that registered read-only step up to write", async () => {
+    let clientId = "";
+    const readOnly = await authorize(
+      "chatgpt-read-only",
+      ["mcp:read"],
+      ["mcp:read"],
+      ["mcp:read"],
+      undefined,
+      (id) => {
+        clientId = id;
+        return Promise.resolve();
+      },
+      { registered: [chatGptCallback], requested: chatGptCallback },
+    );
+    // ChatGPT only shows its linking UI for a challenge carried in the tool result
+    const denied = await toolCall(readOnly.token.access_token, "mutate");
+    expect(denied.status).toBe(200);
+    const reply = (await denied.json()) as {
+      result: { isError: boolean; _meta: Record<string, string[]> };
+    };
+    expect(reply.result.isError).toBe(true);
+    const challenge = required(reply.result._meta["mcp/www_authenticate"]?.[0]);
+    expect(challenge).toContain('error="insufficient_scope"');
+    expect(challenge).toContain(
+      `resource_metadata="${issuer}/.well-known/oauth-protected-resource/mcp"`,
+    );
+    const hint = /scope="([^"]+)"/.exec(challenge)?.[1];
+    const verifier = randomBytes(32).toString("base64url");
+    const stepUp = await browser(
+      authorizationUrl(clientId, required(hint), verifier, chatGptCallback).href,
+    );
+    expect(stepUp.headers.get("location")).not.toContain("error=");
+    const consent = await browser(new URL(required(stepUp.headers.get("location")), issuer).href);
+    const handoff = JSON.parse(
+      Buffer.from(
+        required(
+          required(
+            new URL(required(consent.headers.get("location"))).searchParams.get("handoff"),
+          ).split(".")[0],
+        ),
+        "base64url",
+      ).toString(),
+    ) as { scopes: string[] };
+    expect(handoff.scopes).toEqual(["mcp:read", "mcp:write"]);
+  });
   it("never lets live scopes exceed the consented scopes on an OpenID-only token", async () => {
     const { token } = await authorize("openid-read-only", ["mcp:read"], ["openid"]);
     connections.set("openid-read-only", ["mcp:read", "mcp:write"]);
