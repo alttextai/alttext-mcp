@@ -4,17 +4,20 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
 const client = new Client({ name: "metadata-test", version: "1.0.0" });
 const execFileAsync = promisify(execFile);
 let tools: Tool[];
 beforeAll(async () => {
-  await execFileAsync("npm", ["run", "build"]);
+  await execFileAsync("npm", ["run", "build"], {
+    cwd: fileURLToPath(new URL("..", import.meta.url)),
+  });
   await client.connect(
     new StdioClientTransport({
       command: process.execPath,
-      args: ["dist/index.js"],
+      args: [fileURLToPath(new URL("../dist/index.js", import.meta.url))],
       env: { ALTTEXT_API_KEY: "test-placeholder-no-live-calls" },
       stderr: "pipe",
     }),
@@ -66,7 +69,7 @@ describe("tool discovery effects", () => {
 describe("registry metadata", () => {
   it("declares every supported environment variable", () => {
     const manifest = JSON.parse(
-      readFileSync(new URL("../server.json", import.meta.url), "utf8"),
+      readFileSync(new URL("../../../server.json", import.meta.url), "utf8"),
     ) as {
       packages: Array<{
         environmentVariables: Array<{

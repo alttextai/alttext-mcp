@@ -1,0 +1,46 @@
+{
+  "name": "@alttext_ai/alttext-mcp",
+  "version": "1.0.5",
+  "description": "Generate alt text, translate descriptions, and manage your AltText.ai image library.",
+  "license": "MIT",
+  "author": "AltText.ai (https://alttext.ai)",
+  "homepage": "https://alttext.ai",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "alt-text",
+    "accessibility",
+    "a11y",
+    "image",
+    "ai",
+    "alttext"
+  ],
+  "bugs": "https://github.com/alttextai/alttext-mcp/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alttextai/alttext-mcp.git",
+    "directory": "packages/mcp"
+  },
+  "type": "module",
+  "bin": {
+    "alttext-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "prepack": "npm run build && shx cp ../../README.md ../../LICENSE ."
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.2",
+    "oidc-provider": "9.12.2",
+    "redis": "6.2.1",
+    "zod": "^4.3.6"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "mcpName": "io.github.alttextai/alttext-mcp"
+}

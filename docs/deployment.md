@@ -1,6 +1,6 @@
 # Hosted service deployment
 
-The production image runs the OAuth and Streamable HTTP service on port `3000`. The existing stdio package remains available through `dist/index.js`.
+The production image runs the OAuth and Streamable HTTP service on port `3000`. The image is built from `packages/mcp`; the stdio package remains available through its `dist/index.js` bin.
 
 Required settings:
 

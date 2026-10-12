@@ -21,10 +21,21 @@ jobs:
       - name: Install Redis for integration tests
         run: sudo apt-get update && sudo apt-get install -y redis-server
       - run: npm ci
+      - run: npm run version:stamp
+      - name: Fail on version drift
+        run: git diff --exit-code
+      - name: Check the tag matches the root version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package version v${version}"
+            exit 1
+          fi
       - run: npm run lint
-      - run: npm test
+      - run: npm run typecheck
       - run: npm run build
-      - run: npm publish --provenance --access public
+      - run: npm test
+      - run: npm publish --provenance --access public -w packages/mcp -w packages/cli
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - uses: softprops/action-gh-release@v2

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { AltTextApi } from "../src/alttext-api.js";
+import { AltTextApi } from "@alttext_ai/core";
 import { createServer } from "../src/server.js";
 
 describe("server registration", () => {

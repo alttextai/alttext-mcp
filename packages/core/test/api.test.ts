@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
-import { AltTextApi, AltTextApiError } from "../src/alttext-api.js";
+import { AltTextApi, AltTextApiError } from "../src/api.js";
 
 const BASE_URL = "https://alttext.ai/api/v1";
 const API_KEY = "test-api-key-123";

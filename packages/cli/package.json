@@ -1,0 +1,38 @@
+{
+  "name": "@alttext_ai/cli",
+  "version": "1.0.5",
+  "description": "Command-line tool for AltText.ai.",
+  "license": "MIT",
+  "author": "AltText.ai (https://alttext.ai)",
+  "homepage": "https://alttext.ai",
+  "keywords": [
+    "cli",
+    "alt-text",
+    "accessibility",
+    "a11y",
+    "image",
+    "ai",
+    "alttext"
+  ],
+  "bugs": "https://github.com/alttextai/alttext-mcp/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alttextai/alttext-mcp.git",
+    "directory": "packages/cli"
+  },
+  "type": "module",
+  "bin": {
+    "alttext": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "prepack": "npm run build && shx cp ../../LICENSE ."
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

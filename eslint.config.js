@@ -10,7 +10,8 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: {
         projectService: {
-          allowDefaultProject: ["test/*.ts", "test/remote/*.ts"],
+          allowDefaultProject: ["packages/*/test/*.ts", "packages/*/test/remote/*.ts"],
+          defaultProject: "tsconfig.base.json",
         },
         tsconfigRootDir: import.meta.dirname,
       },
@@ -21,6 +22,14 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ["dist/", "node_modules/", "eslint.config.js", "vitest.config.ts"],
+    ignores: [
+      "**/dist/",
+      "node_modules/",
+      "package/",
+      "scripts/",
+      "eslint.config.js",
+      "vitest.config.ts",
+      "packages/*/tsup.config.ts",
+    ],
   },
 );

@@ -138,12 +138,14 @@ Once configured, just ask your AI assistant:
 
 ## Development
 
+The repo is an npm workspace: `packages/core` (private API client, schemas and formatters, bundled into each published package), `packages/mcp` (`@alttext_ai/alttext-mcp`) and `packages/cli` (`@alttext_ai/cli`, the `alttext` command).
+
 ```sh
 npm install
-npm run build
-npm test
-npm run lint
+npm run check
 ```
+
+The root `package.json` version is the only one to edit. `npm run version:stamp` copies it into every package and `server.json`, and CI fails when they drift. A `v*` tag matching that version publishes both packages.
 
 Tests use mocked `fetch` calls -- no API key or network access needed.
 
@@ -157,4 +159,4 @@ MIT
 
 ## Registry publishing
 
-`server.json` describes the stdio npm package. Its name matches `mcpName` in `package.json`; both versions must match the release being submitted. Publish and verify that exact npm version before running `mcp-publisher publish`. Registry acceptance and directory approval are separate from an npm release.
+`server.json` describes the stdio npm package. Its name matches `mcpName` in `packages/mcp/package.json`; both versions must match the release being submitted. Publish and verify that exact npm version before running `mcp-publisher publish`. Registry acceptance and directory approval are separate from an npm release.

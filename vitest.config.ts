@@ -1,9 +1,17 @@
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vitest/config";
 
+const { version } = JSON.parse(readFileSync("package.json", "utf8")) as { version: string };
+
 export default defineConfig({
+  define: { __VERSION__: JSON.stringify(version) },
   test: {
-    include: ["test/**/*.test.ts"],
+    include: ["packages/*/test/**/*.test.ts"],
     globals: false,
-    forceRerunTriggers: ["**/{package,server}.json", "**/{vitest,vite}.config.*/**", "src/**"],
+    forceRerunTriggers: [
+      "**/{package,server}.json",
+      "**/{vitest,vite}.config.*/**",
+      "packages/*/src/**",
+    ],
   },
 });

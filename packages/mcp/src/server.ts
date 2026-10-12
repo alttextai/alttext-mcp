@@ -1,15 +1,19 @@
-import { createRequire } from "node:module";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { basename, extname } from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { AltTextApi, AltTextApiError } from "./alttext-api.js";
-import { formatAccount, formatImage, formatImageList, formatScrapeResult } from "./formatters.js";
-import { generationOptionsSchema, scrapeOptionsSchema } from "./schemas.js";
-import type { GenerateOptions } from "./types.js";
-
-const require = createRequire(import.meta.url);
-const { version } = require("../package.json") as { version: string };
+import {
+  AltTextApi,
+  AltTextApiError,
+  formatAccount,
+  formatImage,
+  formatImageList,
+  formatScrapeResult,
+  generationOptionsSchema,
+  scrapeOptionsSchema,
+  VERSION,
+  type GenerateOptions,
+} from "@alttext_ai/core";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
@@ -97,7 +101,7 @@ function toGenerateOptions(args: Record<string, unknown>): GenerateOptions {
 }
 
 export function createServer(api: AltTextApi, options: { localFiles?: boolean } = {}): McpServer {
-  const server = new McpServer({ name: "alttext-ai", version });
+  const server = new McpServer({ name: "alttext-ai", version: VERSION });
 
   // ============================================================
   // Account Management
