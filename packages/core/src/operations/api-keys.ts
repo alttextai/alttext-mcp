@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { formatApiKey, formatApiKeyHistory, formatApiKeyList } from "../formatters.js";
-import { defineOperation, type OperationAnnotations } from "../registry/operation.js";
-import type { ApiKeyRecord } from "../types.js";
+import { change, defineOperation, READ, type OperationAnnotations } from "../registry/operation.js";
+import { pageLimit } from "../schemas.js";
 import {
   apiKeyHistorySchema,
   apiKeyListSchema,
@@ -10,22 +10,11 @@ import {
   revealedTokenSchema,
 } from "./outputs.js";
 
-const READ: OperationAnnotations = {
-  readOnlyHint: true,
-  destructiveHint: false,
-  idempotentHint: true,
-  openWorldHint: false,
-};
+const KEY_READ: OperationAnnotations = { ...READ, openWorldHint: false };
 
 const keyId = z.number().int().min(1).describe("The API key's ID");
 const cursor = z.string().max(512).optional().describe("Cursor from a previous page's next_cursor");
-const limit = z
-  .number()
-  .int()
-  .min(1)
-  .max(100)
-  .optional()
-  .describe("Items per page (default: 25, max: 100)");
+const limit = pageLimit("Items per page (default: 25, max: 100)");
 const idempotencyKey = z
   .string()
   .min(1)
@@ -40,10 +29,14 @@ const usageLimit = z
   .nullable()
   .describe("Credits this key may use per billing period; null means unlimited");
 
-function mask(key: ApiKeyRecord): ApiKeyRecord {
-  const masked: Record<string, unknown> = { ...key };
-  delete masked["token"];
-  return masked as ApiKeyRecord;
+// unlike Omit, the remapped keys keep named fields on a record with an index signature
+export type WithoutToken<T> = { [K in keyof T as K extends "token" ? never : K]: T[K] };
+
+/** A copy of the record without its token. */
+export function withoutToken<T extends object>(record: T): WithoutToken<T> {
+  const copy: Record<string, unknown> = { ...(record as object) };
+  delete copy["token"];
+  return copy as WithoutToken<T>;
 }
 
 export const listApiKeys = defineOperation({
@@ -61,13 +54,13 @@ export const listApiKeys = defineOperation({
     q: z.string().max(256).optional().describe("Match keys whose name contains this text"),
   }),
   output: apiKeyListSchema,
-  annotations: READ,
+  annotations: KEY_READ,
   permission: "keys_read",
   localFilesOnly: false,
   command: { noun: "keys", verb: "list" },
   async handler(api, { after, limit, status, q }) {
     const list = await api.listApiKeys({ after, limit, status, q });
-    const masked = { ...list, api_keys: list.api_keys.map(mask) };
+    const masked = { ...list, api_keys: list.api_keys.map(withoutToken) };
     return { text: formatApiKeyList(masked), structured: masked };
   },
 });
@@ -85,12 +78,14 @@ export const getApiKey = defineOperation({
       .describe("full adds usage history, domains and credit periods (default: concise)"),
   }),
   output: maskedApiKeySchema,
-  annotations: READ,
+  annotations: KEY_READ,
   permission: "keys_read",
   localFilesOnly: false,
   command: { noun: "keys", verb: "get" },
   async handler(api, { id, detail }) {
-    const key = mask(await api.getApiKey({ id, detail: detail === "full" ? "full" : undefined }));
+    const key = withoutToken(
+      await api.getApiKey({ id, detail: detail === "full" ? "full" : undefined }),
+    );
     return { text: formatApiKey(key), structured: key };
   },
 });
@@ -102,12 +97,7 @@ export const revealApiKeyToken = defineOperation({
     "Show one API key's full token. The reveal is recorded in the key's history. Only use when the person asks for this key's token",
   input: z.object({ id: keyId }),
   output: revealedTokenSchema,
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
+  annotations: change({ destructive: false, idempotent: true, openWorld: false }),
   permission: "keys_read",
   localFilesOnly: false,
   command: { noun: "keys", verb: "reveal" },
@@ -134,12 +124,7 @@ export const createApiKey = defineOperation({
     idempotency_key: idempotencyKey,
   }),
   output: issuedApiKeySchema,
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: false,
-    idempotentHint: false,
-    openWorldHint: false,
-  },
+  annotations: change({ destructive: false, idempotent: false, openWorld: false }),
   permission: "keys_write",
   localFilesOnly: false,
   command: { noun: "keys", verb: "create" },
@@ -167,17 +152,12 @@ export const updateApiKey = defineOperation({
     idempotency_key: idempotencyKey,
   }),
   output: maskedApiKeySchema,
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: true,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
+  annotations: change({ destructive: true, idempotent: true, openWorld: false }),
   permission: "keys_write",
   localFilesOnly: false,
   command: { noun: "keys", verb: "update" },
   async handler(api, input) {
-    const key = mask(
+    const key = withoutToken(
       await api.updateApiKey({
         id: input.id,
         name: input.name,
@@ -196,12 +176,7 @@ export const rotateApiKey = defineOperation({
     "Replace an API key's token. The old token stops working immediately. Returns the new token",
   input: z.object({ id: keyId, idempotency_key: idempotencyKey }),
   output: issuedApiKeySchema,
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: true,
-    idempotentHint: false,
-    openWorldHint: false,
-  },
+  annotations: change({ destructive: true, idempotent: false, openWorld: false }),
   permission: "keys_write",
   localFilesOnly: false,
   command: { noun: "keys", verb: "rotate" },
@@ -221,17 +196,12 @@ export const revokeApiKey = defineOperation({
     "Revoke an API key. Its token stops working immediately; the key and its usage stay readable",
   input: z.object({ id: keyId, idempotency_key: idempotencyKey }),
   output: maskedApiKeySchema,
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: true,
-    idempotentHint: true,
-    openWorldHint: false,
-  },
+  annotations: change({ destructive: true, idempotent: true, openWorld: false }),
   permission: "keys_write",
   localFilesOnly: false,
   command: { noun: "keys", verb: "revoke" },
   async handler(api, { id, idempotency_key }) {
-    const key = mask(await api.revokeApiKey({ id, idempotencyKey: idempotency_key }));
+    const key = withoutToken(await api.revokeApiKey({ id, idempotencyKey: idempotency_key }));
     return { text: `Revoked key ${String(key.id)}.\n\n${formatApiKey(key)}`, structured: key };
   },
 });
@@ -242,7 +212,7 @@ export const listApiKeyHistory = defineOperation({
   description: "List the recorded changes to one API key, newest first, with who made each",
   input: z.object({ id: keyId, after: cursor, limit }),
   output: apiKeyHistorySchema,
-  annotations: READ,
+  annotations: KEY_READ,
   permission: "keys_read",
   localFilesOnly: false,
   command: { noun: "keys", verb: "history" },

@@ -3,6 +3,7 @@ import {
   AltTextApi,
   AltTextApiError,
   availableOperations,
+  keyAccess,
   runOperation,
   VERSION,
   type Operation,
@@ -10,7 +11,7 @@ import {
 } from "@alttext_ai/core";
 
 export interface ServerOptions extends SurfaceOptions {
-  readonly toolMeta?: (operation: Operation) => Record<string, unknown>;
+  readonly toolMeta?: (operation: Operation) => Record<string, unknown> | undefined;
 }
 
 const PROBE_TIMEOUT_MS = 10_000;
@@ -65,7 +66,7 @@ export async function canManageKeys(api: AltTextApi): Promise<boolean> {
   });
   try {
     const account = await Promise.race([api.getAccount(), timeout]);
-    return account.api_key?.can_manage_keys === true;
+    return keyAccess(account).can_manage_keys;
   } catch {
     return false;
   } finally {

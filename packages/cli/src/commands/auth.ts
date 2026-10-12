@@ -1,5 +1,5 @@
 import type { Command as CommanderCommand } from "commander";
-import { AltTextApiError, type AccountRecord } from "@alttext_ai/core";
+import { AltTextApiError, keyAccess, type AccountRecord } from "@alttext_ai/core";
 import {
   credentialsPath,
   removeCredentials,
@@ -58,8 +58,7 @@ export async function login(context: Context): Promise<void> {
   if (context.json) {
     writeJson(io, {
       account: account.name,
-      key_kind: account.api_key?.kind ?? null,
-      can_manage_keys: account.api_key?.can_manage_keys === true,
+      ...keyAccess(account),
       stored_in: storedIn,
     });
   } else {
@@ -96,8 +95,7 @@ export async function whoami(context: Context): Promise<void> {
   const result = {
     account: account.name,
     key_name: account.api_key?.name ?? null,
-    key_kind: account.api_key?.kind ?? null,
-    can_manage_keys: account.api_key?.can_manage_keys === true,
+    ...keyAccess(account),
     credential_source: credential.source,
   };
   if (context.json) {

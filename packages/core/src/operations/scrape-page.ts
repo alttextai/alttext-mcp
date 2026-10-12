@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { formatScrapeResult } from "../formatters.js";
-import { defineOperation } from "../registry/operation.js";
+import { change, defineOperation } from "../registry/operation.js";
 import { scrapeOptionsSchema } from "../schemas.js";
 import { scrapeResultSchema } from "./outputs.js";
 
@@ -20,12 +20,7 @@ export const scrapePage = defineOperation({
     ...scrapeOptionsSchema,
   }),
   output: scrapeResultSchema,
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: true,
-    idempotentHint: false,
-    openWorldHint: true,
-  },
+  annotations: change({ destructive: true, idempotent: false, openWorld: true }),
   permission: "write",
   localFilesOnly: false,
   command: { noun: "pages", verb: "scrape" },

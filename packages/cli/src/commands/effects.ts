@@ -1,4 +1,16 @@
-import type { AltTextApi, Operation } from "@alttext_ai/core";
+import {
+  createApiKey,
+  deleteImage,
+  revealApiKeyToken,
+  revokeApiKey,
+  rotateApiKey,
+  updateAccount,
+  updateApiKey,
+  updateImage,
+  withoutToken,
+  type AltTextApi,
+  type Operation,
+} from "@alttext_ai/core";
 
 export type Target = Record<string, unknown>;
 
@@ -15,17 +27,11 @@ const INTEGRATIONS: Readonly<Record<string, string>> = {
 
 /** Operations that confirm interactively and need --yes without a terminal. */
 export const CONFIRMED_OPERATIONS: ReadonlySet<string> = new Set([
-  "rotate_api_key",
-  "revoke_api_key",
-  "delete_image",
-  "update_account",
+  rotateApiKey.name,
+  revokeApiKey.name,
+  deleteImage.name,
+  updateAccount.name,
 ]);
-
-export function withoutToken(record: object): Target {
-  const copy: Target = { ...record };
-  delete copy["token"];
-  return copy;
-}
 
 /** Reads what a change would act on, so a confirmation or dry run can name it. */
 export async function readTarget(
@@ -38,10 +44,10 @@ export async function readTarget(
     return withoutToken(await api.getApiKey({ id: input["id"] }));
   }
   if (noun === "images" && typeof input["asset_id"] === "string") {
-    if (operation.name !== "delete_image" && operation.name !== "update_image") return null;
+    if (operation.name !== deleteImage.name && operation.name !== updateImage.name) return null;
     return { ...(await api.getImage({ assetId: input["asset_id"] })) };
   }
-  if (operation.name === "update_account") return { ...(await api.getAccount()) };
+  if (operation.name === updateAccount.name) return { ...(await api.getAccount()) };
   return null;
 }
 
@@ -92,22 +98,22 @@ export function describeEffect(
 ): Effect {
   const key = target ?? { id: input["id"] };
   switch (operation.name) {
-    case "create_api_key":
+    case createApiKey.name:
       return {
         summary: `Create key ${show(input["name"])} with a limit of ${limitText(input["usage_limit"])} per period`,
         consequences: [],
       };
-    case "update_api_key":
+    case updateApiKey.name:
       return {
         summary: `Update ${keyLabel(key)}: ${changes(input, target, ["name", "usage_limit"])}`,
         consequences: [],
       };
-    case "rotate_api_key":
+    case rotateApiKey.name:
       return {
         summary: `Rotate ${keyLabel(key)}`,
         consequences: ["The old token stops working immediately.", ...integrationNotice(key)],
       };
-    case "revoke_api_key":
+    case revokeApiKey.name:
       return {
         summary: `Revoke ${keyLabel(key)}`,
         consequences: [
@@ -115,24 +121,24 @@ export function describeEffect(
           ...integrationNotice(key),
         ],
       };
-    case "reveal_api_key_token":
+    case revealApiKeyToken.name:
       return {
         summary: `Reveal the token of ${keyLabel(key)}`,
         consequences: ["The reveal is recorded in the key's history."],
       };
-    case "delete_image": {
+    case deleteImage.name: {
       const url = typeof target?.["url"] === "string" ? ` (${target["url"]})` : "";
       return {
         summary: `Delete image ${String(input["asset_id"])}${url}`,
         consequences: ["This can't be undone."],
       };
     }
-    case "update_image":
+    case updateImage.name:
       return {
         summary: `Update image ${String(input["asset_id"])}: ${changes(input, target, ["alt_text", "tags", "metadata", "lang", "overwrite"])}`,
         consequences: [],
       };
-    case "update_account":
+    case updateAccount.name:
       return {
         summary: `Update account ${show(target?.["name"])}: ${changes(input, target, ["name", "webhook_url", "notification_email"])}`,
         consequences: [],

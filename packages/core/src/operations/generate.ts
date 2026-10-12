@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { z } from "zod";
 import { formatImage } from "../formatters.js";
-import { defineOperation } from "../registry/operation.js";
+import { change, defineOperation } from "../registry/operation.js";
 import { generationOptionsSchema } from "../schemas.js";
 import type { GenerateOptions } from "../types.js";
 import { ALLOWED_IMAGE_EXTENSIONS, resolveAndValidateFile } from "./files.js";
@@ -41,12 +41,7 @@ export const generateAltText = defineOperation({
     ...generationOptionsSchema,
   }),
   output: imageRecordSchema,
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: true,
-    idempotentHint: false,
-    openWorldHint: true,
-  },
+  annotations: change({ destructive: true, idempotent: false, openWorld: true }),
   permission: "write",
   localFilesOnly: false,
   command: { noun: "images", verb: "generate" },
@@ -66,12 +61,7 @@ export const generateAltTextFromFile = defineOperation({
     ...generationOptionsSchema,
   }),
   output: imageRecordSchema,
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: true,
-    idempotentHint: false,
-    openWorldHint: true,
-  },
+  annotations: change({ destructive: true, idempotent: false, openWorld: true }),
   permission: "write",
   localFilesOnly: true,
   command: { noun: "images", verb: "generate-from-file" },
@@ -99,12 +89,7 @@ export const translateImage = defineOperation({
       .describe("Target language code(s), comma-separated (e.g. 'de', 'fr,es')"),
   }),
   output: imageRecordSchema,
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: false,
-    idempotentHint: false,
-    openWorldHint: true,
-  },
+  annotations: change({ destructive: false, idempotent: false, openWorld: true }),
   permission: "write",
   localFilesOnly: false,
   command: { noun: "images", verb: "translate" },

@@ -44,6 +44,10 @@ function mirrorSecuritySchemes(message: JSONRPCMessage): JSONRPCMessage {
   );
   return { ...message, result: { ...message.result, tools } };
 }
+/** The MCP scopes in a space-separated scope string. */
+function mcpScopes(scope?: string): string[] {
+  return (scope ?? "").split(" ").filter((s) => s.startsWith("mcp:"));
+}
 const equal = (a: string, b: string): boolean =>
   a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
@@ -150,9 +154,8 @@ export function createHttp(
       }
       const detail = await oauth.interactionDetails(req, res);
       const rawScope = detail.params["scope"];
-      const requestedScopes = (typeof rawScope === "string" ? rawScope : "mcp:read")
-        .split(" ")
-        .filter(Boolean);
+      const requested = typeof rawScope === "string" ? rawScope : "mcp:read";
+      const requestedScopes = requested.split(" ").filter(Boolean);
       if (requestedScopes.some((s) => !SCOPES.includes(s))) {
         send(res, 400, { error: "invalid_scope" });
         return;
@@ -162,16 +165,10 @@ export function createHttp(
         send(res, 400, { error: "invalid_client" });
         return;
       }
-      const requestedMcpScopes = requestedScopes.filter((scope) => scope.startsWith("mcp:"));
-      const clientMcpScopes = (client.scope ?? "")
-        .split(" ")
-        .filter((scope) => scope.startsWith("mcp:"));
       // an OpenID-only request asks for the client's registered MCP scope ceiling
-      const scopes = requestedMcpScopes.length
-        ? requestedMcpScopes
-        : clientMcpScopes.length
-          ? clientMcpScopes
-          : ["mcp:read", "mcp:write"];
+      const scopes = [mcpScopes(requested), mcpScopes(client.scope)].find(
+        (list) => list.length,
+      ) ?? ["mcp:read", "mcp:write"];
       if (!scopes.includes("mcp:read")) {
         send(res, 400, { error: "invalid_scope" });
         return;
@@ -277,14 +274,15 @@ export function createHttp(
       deny();
       return;
     }
-    const stored = await store.get<Connection>("Connection", token.accountId);
-    const current = await bridge.status(token.accountId);
+    const [stored, current] = await Promise.all([
+      store.get<Connection>("Connection", token.accountId),
+      bridge.status(token.accountId),
+    ]);
     if (!stored?.api_key || !current) {
       deny();
       return;
     }
-    const tokenScopes = (token.scope ?? "").split(" ").filter(Boolean);
-    const requestedMcpScopes = tokenScopes.filter((scope) => scope.startsWith("mcp:"));
+    const requestedMcpScopes = mcpScopes(token.scope);
     const scopes = (requestedMcpScopes.length ? requestedMcpScopes : current.scopes).filter(
       (scope) => current.scopes.includes(scope) && stored.scopes.includes(scope),
     );

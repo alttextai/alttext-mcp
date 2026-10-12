@@ -1,7 +1,19 @@
 import { z } from "zod";
 import { formatAccount } from "../formatters.js";
-import { defineOperation } from "../registry/operation.js";
+import { change, defineOperation, READ } from "../registry/operation.js";
+import type { AccountRecord } from "../types.js";
 import { accountRecordSchema } from "./outputs.js";
+
+/** What the calling key is and whether it may manage keys. */
+export function keyAccess(account: AccountRecord): {
+  key_kind: string | null;
+  can_manage_keys: boolean;
+} {
+  return {
+    key_kind: account.api_key?.kind ?? null,
+    can_manage_keys: account.api_key?.can_manage_keys === true,
+  };
+}
 
 export const getAccount = defineOperation({
   name: "get_account",
@@ -9,12 +21,7 @@ export const getAccount = defineOperation({
   description: "Get your AltText.ai account info including credit balance, usage, and settings",
   input: z.object({}),
   output: accountRecordSchema,
-  annotations: {
-    readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: true,
-  },
+  annotations: READ,
   permission: "read",
   localFilesOnly: false,
   command: { noun: "account", verb: "get" },
@@ -22,11 +29,7 @@ export const getAccount = defineOperation({
     const account = await api.getAccount();
     return {
       text: formatAccount(account),
-      structured: {
-        ...account,
-        key_kind: account.api_key?.kind ?? null,
-        can_manage_keys: account.api_key?.can_manage_keys === true,
-      },
+      structured: { ...account, ...keyAccess(account) },
     };
   },
 });
@@ -41,12 +44,7 @@ export const updateAccount = defineOperation({
     notification_email: z.email().optional().describe("Email address for notifications"),
   }),
   output: accountRecordSchema,
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: true,
-    idempotentHint: true,
-    openWorldHint: true,
-  },
+  annotations: change({ destructive: true, idempotent: true, openWorld: true }),
   permission: "write",
   localFilesOnly: false,
   command: { noun: "account", verb: "update" },

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { formatImage, formatImageList } from "../formatters.js";
-import { defineOperation } from "../registry/operation.js";
+import { change, defineOperation, READ } from "../registry/operation.js";
+import { pageLimit } from "../schemas.js";
 import { deletedImageSchema, imageListSchema, imageRecordSchema } from "./outputs.js";
 
 export const listImages = defineOperation({
@@ -9,25 +10,14 @@ export const listImages = defineOperation({
   description: "List images in your AltText.ai library with pagination",
   input: z.object({
     page: z.number().int().min(1).optional().describe("Page number (default: 1)"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(100)
-      .optional()
-      .describe("Items per page (default: 20, max: 100)"),
+    limit: pageLimit("Items per page (default: 20, max: 100)"),
     lang: z.string().max(64).optional().describe("Filter alt texts by language code"),
     url: z.url().optional().describe("Filter images by exact URL match"),
     sort: z.enum(["id", "created_at", "asset_id"]).optional().describe("Sort column (default: id)"),
     direction: z.enum(["ASC", "DESC"]).optional().describe("Sort direction (default: DESC)"),
   }),
   output: imageListSchema,
-  annotations: {
-    readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: true,
-  },
+  annotations: READ,
   permission: "read",
   localFilesOnly: false,
   command: { noun: "images", verb: "list" },
@@ -43,22 +33,11 @@ export const searchImages = defineOperation({
   description: "Search images by alt text content",
   input: z.object({
     query: z.string().max(256).describe("Search query to match against alt text"),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(100)
-      .optional()
-      .describe("Max results to return (default: 20)"),
+    limit: pageLimit("Max results to return (default: 20)"),
     lang: z.string().max(64).optional().describe("Filter by language code"),
   }),
   output: imageListSchema,
-  annotations: {
-    readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: true,
-  },
+  annotations: READ,
   permission: "read",
   localFilesOnly: false,
   command: { noun: "images", verb: "search" },
@@ -80,12 +59,7 @@ export const getImage = defineOperation({
     lang: z.string().max(64).optional().describe("Filter alt texts by language code"),
   }),
   output: imageRecordSchema,
-  annotations: {
-    readOnlyHint: true,
-    destructiveHint: false,
-    idempotentHint: true,
-    openWorldHint: true,
-  },
+  annotations: READ,
   permission: "read",
   localFilesOnly: false,
   command: { noun: "images", verb: "get" },
@@ -114,12 +88,7 @@ export const updateImage = defineOperation({
       .describe("If false, skip language entries that already exist"),
   }),
   output: imageRecordSchema,
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: true,
-    idempotentHint: true,
-    openWorldHint: true,
-  },
+  annotations: change({ destructive: true, idempotent: true, openWorld: true }),
   permission: "write",
   localFilesOnly: false,
   command: { noun: "images", verb: "update" },
@@ -144,12 +113,7 @@ export const deleteImage = defineOperation({
     asset_id: z.string().max(256).describe("The asset ID of the image to delete"),
   }),
   output: deletedImageSchema,
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: true,
-    idempotentHint: true,
-    openWorldHint: true,
-  },
+  annotations: change({ destructive: true, idempotent: true, openWorld: true }),
   permission: "write",
   localFilesOnly: false,
   command: { noun: "images", verb: "delete" },

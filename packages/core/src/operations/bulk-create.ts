@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
-import { defineOperation } from "../registry/operation.js";
+import { change, defineOperation } from "../registry/operation.js";
 import { resolveAndValidateFile } from "./files.js";
 import { bulkCreateResultSchema } from "./outputs.js";
 
@@ -17,12 +17,7 @@ export const bulkCreate = defineOperation({
     email: z.email().optional().describe("Email for completion notification"),
   }),
   output: bulkCreateResultSchema,
-  annotations: {
-    readOnlyHint: false,
-    destructiveHint: true,
-    idempotentHint: false,
-    openWorldHint: true,
-  },
+  annotations: change({ destructive: true, idempotent: false, openWorld: true }),
   permission: "write",
   localFilesOnly: true,
   command: { noun: "images", verb: "bulk-create" },

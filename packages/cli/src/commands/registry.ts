@@ -12,7 +12,6 @@ export const CLI_ONLY_COMMANDS: readonly string[] = ["login", "logout", "whoami"
 export interface CommandFlag {
   readonly flag: string;
   readonly property: string;
-  readonly type: string;
   readonly required: boolean;
   readonly description: string | undefined;
   readonly choices: readonly string[] | undefined;
@@ -31,7 +30,6 @@ export interface Command {
 }
 
 interface PropertySchema {
-  type?: string;
   description?: string;
   enum?: string[];
 }
@@ -42,7 +40,6 @@ function toFlags(inputSchema: Record<string, unknown>): CommandFlag[] {
   return Object.entries(properties).map(([property, schema]) => ({
     flag: `--${property.replaceAll("_", "-")}`,
     property,
-    type: schema.type ?? "string",
     required: required.has(property),
     description: schema.description,
     choices: schema.enum,

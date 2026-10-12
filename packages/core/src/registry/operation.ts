@@ -10,6 +10,28 @@ export interface OperationAnnotations {
   readonly openWorldHint: boolean;
 }
 
+/** A read with no side effects that reaches out to the image library. */
+export const READ: OperationAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: true,
+};
+
+/** Annotations for an operation that changes something. */
+export function change(hints: {
+  destructive: boolean;
+  idempotent: boolean;
+  openWorld: boolean;
+}): OperationAnnotations {
+  return {
+    readOnlyHint: false,
+    destructiveHint: hints.destructive,
+    idempotentHint: hints.idempotent,
+    openWorldHint: hints.openWorld,
+  };
+}
+
 export interface OperationResult<O extends z.ZodObject> {
   readonly text: string;
   readonly structured: z.infer<O>;

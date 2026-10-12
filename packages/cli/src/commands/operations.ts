@@ -6,10 +6,15 @@ import {
   type Command as CommanderCommand,
 } from "commander";
 import {
+  createApiKey,
   formatApiKey,
+  getApiKey,
+  listApiKeys,
+  revealApiKeyToken,
+  rotateApiKey,
   runOperation,
+  withoutToken,
   type AltTextApi,
-  type ApiKeyRecord,
   type Operation,
 } from "@alttext_ai/core";
 import { CliError, EXIT } from "../exit-codes.js";
@@ -19,14 +24,13 @@ import {
   CONFIRMED_OPERATIONS,
   describeEffect,
   readTarget,
-  withoutToken,
   type Effect,
   type Target,
 } from "./effects.js";
 import type { Command, CommandFlag } from "./registry.js";
 
 const POSITIONAL = new Set(["id", "asset_id"]);
-const TOKEN_OPERATIONS = new Set(["create_api_key", "rotate_api_key", "reveal_api_key_token"]);
+const TOKEN_OPERATIONS = new Set([createApiKey.name, rotateApiKey.name, revealApiKeyToken.name]);
 const NULL_WORDS = new Set(["none", "null", "unlimited"]);
 // commander turns a parsed null into "", so null travels as this marker until the action
 const NULL_VALUE = Symbol("null");
@@ -201,6 +205,11 @@ function cell(value: unknown): string {
   return typeof value === "object" ? JSON.stringify(value) : String(value as string | number);
 }
 
+function tokenCell(context: Context, key: Target): string {
+  if (context.showTokens) return cell(key["token"]);
+  return key["token_hint"] ? `…${cell(key["token_hint"])}` : "";
+}
+
 async function listKeys(
   context: Context,
   api: AltTextApi,
@@ -216,7 +225,7 @@ async function listKeys(
   const result = context.all ? { api_keys: keys, next_cursor: null, has_more: false } : page;
 
   if (context.json) {
-    writeJson(context.io, { ...result, api_keys: keys });
+    writeJson(context.io, result);
   } else if (keys.length === 0) {
     writeLine(context.io.stdout, "No keys found.");
   } else {
@@ -224,11 +233,7 @@ async function listKeys(
       cell(key["id"]),
       cell(key["name"]),
       cell(key["status"]),
-      context.showTokens
-        ? cell(key["token"])
-        : key["token_hint"]
-          ? `…${cell(key["token_hint"])}`
-          : "",
+      tokenCell(context, key),
       cell(key["billable_credits"]),
       typeof key["usage_limit"] === "number" ? String(key["usage_limit"]) : "unlimited",
       cell(key["resets_at"]).slice(0, 10),
@@ -267,7 +272,7 @@ async function getKeyWithToken(
     writeJson(context.io, { ...key, token });
     return;
   }
-  const text = formatApiKey(withoutToken(raw) as ApiKeyRecord)
+  const text = formatApiKey(withoutToken(raw))
     .split("\n")
     .filter((line) => !line.startsWith("Token: "));
   text.splice(3, 0, `Token: ${token ?? "(none)"}`);
@@ -283,9 +288,9 @@ function printIssued(context: Context, operation: Operation, key: Target): void 
   }
   const label = `key ${cell(key["id"])} "${cell(key["name"])}"`;
   const notes: Record<string, string> = {
-    create_api_key: `Created ${label}.`,
-    rotate_api_key: `Rotated ${label}. The old token no longer works.`,
-    reveal_api_key_token: `Revealed the token of ${label}; the reveal is recorded in its history.`,
+    [createApiKey.name]: `Created ${label}.`,
+    [rotateApiKey.name]: `Rotated ${label}. The old token no longer works.`,
+    [revealApiKeyToken.name]: `Revealed the token of ${label}; the reveal is recorded in its history.`,
   };
   if (!context.json) writeLine(context.io.stderr, notes[operation.name] ?? "");
   if (typeof key["integration_warning"] === "string") {
@@ -322,8 +327,8 @@ async function execute(
     writeLine(context.io.stderr, `Idempotency key: ${String(input["idempotency_key"])}`);
   }
 
-  if (operation.name === "list_api_keys") return listKeys(context, api, operation, input);
-  if (operation.name === "get_api_key" && context.showTokens) {
+  if (operation.name === listApiKeys.name) return listKeys(context, api, operation, input);
+  if (operation.name === getApiKey.name && context.showTokens) {
     return getKeyWithToken(context, api, operation, input);
   }
 
@@ -359,7 +364,7 @@ export function addOperationCommand(
       attributes.set(option.attributeName(), flag.property);
     }
   }
-  if (operation.name === "list_api_keys") {
+  if (operation.name === listApiKeys.name) {
     sub.option("--all", "Follow cursors and list every matching key");
   }
 
