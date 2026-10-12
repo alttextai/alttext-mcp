@@ -26,6 +26,8 @@ export const accountRecordSchema = z.looseObject({
   ending_period: z.boolean().nullish(),
   remove_symbols: z.boolean().nullish(),
   subscription: z.unknown().optional(),
+  key_kind: z.string().nullish(),
+  can_manage_keys: z.boolean().optional(),
 });
 
 export const imageListSchema = z.object({
@@ -62,4 +64,64 @@ export const scrapeResultSchema = z.looseObject({
   ),
   total_processed: z.number(),
   errors: z.record(z.string(), z.array(z.string())).nullish(),
+});
+
+// z.object drops undeclared fields, so a token never reaches a masked key's structured output
+export const maskedApiKeySchema = z.object({
+  id: z.number(),
+  name: z.string().nullable(),
+  kind: z.string(),
+  origin: z.string().nullish(),
+  integration: z.string().nullish(),
+  status: z.string(),
+  token_hint: z.string().nullish(),
+  usage_limit: z.number().nullish(),
+  credits_used: z.number().nullish(),
+  billable_credits: z.number().nullish(),
+  period_start: z.string().nullish(),
+  resets_at: z.string().nullish(),
+  previous_period: z
+    .object({
+      billable_credits: z.number().nullish(),
+      billable_complete: z.boolean().nullish(),
+      recorded_at: z.string().nullish(),
+    })
+    .nullish(),
+  created_by: z.object({ type: z.string().nullish(), name: z.string().nullish() }).nullish(),
+  created_at: z.string().nullish(),
+  last_used_at: z.string().nullish(),
+  revoked_at: z.string().nullish(),
+  usage: z.record(z.string(), z.unknown()).nullish(),
+  integration_warning: z.string().nullish(),
+});
+
+export const issuedApiKeySchema = maskedApiKeySchema.extend({ token: z.string() });
+
+export const revealedTokenSchema = z.object({
+  id: z.number(),
+  name: z.string().nullable(),
+  status: z.string(),
+  token: z.string().nullable(),
+});
+
+export const apiKeyListSchema = z.object({
+  api_keys: z.array(maskedApiKeySchema),
+  next_cursor: z.string().nullable(),
+  has_more: z.boolean(),
+});
+
+export const apiKeyHistorySchema = z.object({
+  api_key_id: z.number(),
+  events: z.array(
+    z.object({
+      id: z.number(),
+      action: z.string(),
+      actor: z.object({ type: z.string().nullish(), name: z.string().nullish() }).nullish(),
+      before: z.record(z.string(), z.unknown()).nullish(),
+      after: z.record(z.string(), z.unknown()).nullish(),
+      created_at: z.string(),
+    }),
+  ),
+  next_cursor: z.string().nullable(),
+  has_more: z.boolean(),
 });

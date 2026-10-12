@@ -3,6 +3,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type Provider from "oidc-provider";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { Permission } from "@alttext_ai/core";
 import type { RemoteConfig } from "./config.js";
 import { type Connection, ProductBridge, signHandoff } from "./product-bridge.js";
 import type { OAuthStore } from "./store.js";
@@ -14,9 +15,23 @@ interface Handoff {
   scopes: string[];
 }
 const OPENAI_APPS_CHALLENGE = "PlUuJJowjOgZmLFWv_wfh-9vnZDPkIcgxyaP-82wOqw";
+const SCOPES = ["openid", "mcp:read", "mcp:write", "mcp:keys"];
+const REQUIRED_SCOPES: Record<Permission, string[]> = {
+  read: [],
+  write: ["mcp:write"],
+  keys_read: ["mcp:keys"],
+  keys_write: ["mcp:keys", "mcp:write"],
+};
+const MISSING_SCOPE: Record<string, string> = {
+  "mcp:keys":
+    "This connection has not been granted the Manage API keys permission. Reconnect the assistant with Manage API keys ticked, or manage keys in the dashboard or the alttext CLI with a full-access key.",
+  "mcp:write":
+    "This connection has read-only access. Reconnect the assistant and allow write access.",
+};
 export interface Catalog {
   create: (apiKey: string) => McpServer;
-  readTools: Set<string>;
+  // a tool missing from the map needs write access
+  permissions: ReadonlyMap<string, Permission>;
 }
 const equal = (a: string, b: string): boolean =>
   a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
@@ -91,7 +106,7 @@ export function createHttp(
         resource: config.resource,
         authorization_servers: [config.issuer],
         // clients register with these (MCP 2025-11-25 Scope Selection Strategy), so openid must be here
-        scopes_supported: ["openid", "mcp:read", "mcp:write"],
+        scopes_supported: SCOPES,
         bearer_methods_supported: ["header"],
       });
       return;
@@ -127,7 +142,7 @@ export function createHttp(
       const requestedScopes = (typeof rawScope === "string" ? rawScope : "mcp:read")
         .split(" ")
         .filter(Boolean);
-      if (requestedScopes.some((s) => !["openid", "mcp:read", "mcp:write"].includes(s))) {
+      if (requestedScopes.some((s) => !SCOPES.includes(s))) {
         send(res, 400, { error: "invalid_scope" });
         return;
       }
@@ -295,16 +310,26 @@ export function createHttp(
       return;
     }
     const request = body as { method?: string; params?: { name?: string } };
-    if (
-      request.method === "tools/call" &&
-      !catalog.readTools.has(request.params?.name ?? "") &&
-      !scopes.includes("mcp:write")
-    ) {
+    const needed =
+      request.method === "tools/call"
+        ? REQUIRED_SCOPES[catalog.permissions.get(request.params?.name ?? "") ?? "write"]
+        : [];
+    const missing = needed.find((scope) => !scopes.includes(scope));
+    if (missing) {
+      // the challenge keeps every scope the connection holds so stepping up never drops one
+      const challenge = SCOPES.filter(
+        (scope) => scope === "openid" || scopes.includes(scope) || needed.includes(scope),
+      );
+      const description = MISSING_SCOPE[missing] ?? "";
       res.setHeader(
         "WWW-Authenticate",
-        'Bearer error="insufficient_scope", scope="openid mcp:read mcp:write"',
+        `Bearer error="insufficient_scope", scope="${challenge.join(" ")}", error_description="${description}"`,
       );
-      send(res, 403, { error: "insufficient_scope" });
+      send(res, 403, {
+        error: "insufficient_scope",
+        required_scope: missing,
+        error_description: description,
+      });
       return;
     }
     const server = catalog.create(stored.api_key);

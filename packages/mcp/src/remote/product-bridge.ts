@@ -66,7 +66,7 @@ export class ProductBridge {
       typeof value.account_id === "string" &&
       Array.isArray(value.scopes) &&
       value.scopes.includes("mcp:read") &&
-      value.scopes.every((s) => ["mcp:read", "mcp:write"].includes(s)) &&
+      value.scopes.every((s) => ["mcp:read", "mcp:write", "mcp:keys"].includes(s)) &&
       Number.isFinite(Date.parse(value.expires_at)) &&
       Date.parse(value.expires_at) > Date.now()
     );

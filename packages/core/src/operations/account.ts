@@ -20,7 +20,14 @@ export const getAccount = defineOperation({
   command: { noun: "account", verb: "get" },
   async handler(api) {
     const account = await api.getAccount();
-    return { text: formatAccount(account), structured: account };
+    return {
+      text: formatAccount(account),
+      structured: {
+        ...account,
+        key_kind: account.api_key?.kind ?? null,
+        can_manage_keys: account.api_key?.can_manage_keys === true,
+      },
+    };
   },
 });
 

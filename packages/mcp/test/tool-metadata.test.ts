@@ -18,7 +18,11 @@ beforeAll(async () => {
     new StdioClientTransport({
       command: process.execPath,
       args: [fileURLToPath(new URL("../dist/index.js", import.meta.url))],
-      env: { ALTTEXT_API_KEY: "test-placeholder-no-live-calls" },
+      // an unreachable API makes the startup key probe fail closed without a live call
+      env: {
+        ALTTEXT_API_KEY: "test-placeholder-no-live-calls",
+        ALTTEXT_API_BASE_URL: "http://127.0.0.1:9/api/v1",
+      },
       stderr: "pipe",
     }),
   );

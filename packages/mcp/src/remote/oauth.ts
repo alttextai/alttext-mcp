@@ -23,14 +23,14 @@ export function createOAuth(
     },
     clientAuthMethods: ["none", "client_secret_basic", "client_secret_post"],
     claims: {},
-    scopes: ["openid", "mcp:read", "mcp:write"],
+    scopes: ["openid", "mcp:read", "mcp:write", "mcp:keys"],
     responseTypes: ["code"],
     clientDefaults: {
       id_token_signed_response_alg: "ES256",
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       token_endpoint_auth_method: "none",
-      scope: "openid mcp:read mcp:write",
+      scope: "openid mcp:read mcp:write mcp:keys",
     },
     pkce: { required: () => true },
     features: {
@@ -44,7 +44,7 @@ export function createOAuth(
         getResourceServerInfo: (_ctx, resource) => {
           if (resource !== config.resource) throw new errors.InvalidTarget();
           return {
-            scope: "mcp:read mcp:write",
+            scope: "mcp:read mcp:write mcp:keys",
             audience: config.resource,
             accessTokenTTL: 900,
             accessTokenFormat: "opaque",

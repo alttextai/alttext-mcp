@@ -3,6 +3,7 @@ import {
   operationJsonSchemas,
   type Operation,
   type OperationAnnotations,
+  type SurfaceOptions,
 } from "@alttext_ai/core";
 
 /** Commands that exist only on the CLI and map to no registry operation. */
@@ -64,7 +65,7 @@ function toCommand(operation: Operation): Command {
   };
 }
 
-/** The CLI command table, one command per registry operation. */
-export function buildCommandTable(options: { localFiles?: boolean } = {}): Command[] {
-  return availableOperations(options).map(toCommand);
+/** The CLI command table, one command per registry operation; the API refuses key commands to a site key. */
+export function buildCommandTable(options: SurfaceOptions = {}): Command[] {
+  return availableOperations({ keys: true, ...options }).map(toCommand);
 }

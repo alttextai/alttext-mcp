@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { AltTextApi, VERSION } from "@alttext_ai/core";
-import { createServer } from "./server.js";
+import { createLocalServer } from "./server.js";
 
 const apiKey = process.env["ALTTEXT_API_KEY"];
 if (!apiKey) {
@@ -9,9 +9,8 @@ if (!apiKey) {
   process.exit(1);
 }
 
-const server = createServer(new AltTextApi(apiKey, process.env["ALTTEXT_API_BASE_URL"], VERSION));
-server
-  .connect(new StdioServerTransport())
+createLocalServer(new AltTextApi(apiKey, process.env["ALTTEXT_API_BASE_URL"], VERSION))
+  .then((server) => server.connect(new StdioServerTransport()))
   .then(() => {
     console.error("AltText.ai MCP Server running on stdio");
   })

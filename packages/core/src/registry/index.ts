@@ -1,4 +1,14 @@
 import { getAccount, updateAccount } from "../operations/account.js";
+import {
+  createApiKey,
+  getApiKey,
+  listApiKeyHistory,
+  listApiKeys,
+  revealApiKeyToken,
+  revokeApiKey,
+  rotateApiKey,
+  updateApiKey,
+} from "../operations/api-keys.js";
 import { bulkCreate } from "../operations/bulk-create.js";
 import {
   generateAltText,
@@ -39,11 +49,34 @@ export const operations: readonly Operation[] = [
   deleteImage,
   bulkCreate,
   scrapePage,
+  listApiKeys,
+  getApiKey,
+  revealApiKeyToken,
+  createApiKey,
+  updateApiKey,
+  rotateApiKey,
+  revokeApiKey,
+  listApiKeyHistory,
 ];
 
-/** Operations available on a surface; local-file operations need files on the same machine. */
-export function availableOperations(options: { localFiles?: boolean } = {}): readonly Operation[] {
-  return options.localFiles === false
-    ? operations.filter((operation) => !operation.localFilesOnly)
-    : operations;
+/** Whether an operation manages API keys, which only some credentials and connections may do. */
+export function isKeyOperation(operation: Operation): boolean {
+  return operation.permission === "keys_read" || operation.permission === "keys_write";
+}
+
+export interface SurfaceOptions {
+  readonly localFiles?: boolean;
+  readonly keys?: boolean;
+}
+
+/**
+ * Operations available on a surface; local-file operations need files on the same machine,
+ * and key operations are left out unless the surface opts in.
+ */
+export function availableOperations(options: SurfaceOptions = {}): readonly Operation[] {
+  return operations.filter(
+    (operation) =>
+      (options.localFiles !== false || !operation.localFilesOnly) &&
+      (options.keys === true || !isKeyOperation(operation)),
+  );
 }

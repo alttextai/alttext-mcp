@@ -3,12 +3,12 @@ import { createServer, request } from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
 import { createClient, type RedisClientType } from "redis";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { readConfig } from "../../src/remote/config.js";
 import { OAuthStore } from "../../src/remote/store.js";
 import { ProductBridge } from "../../src/remote/product-bridge.js";
 import { createOAuth } from "../../src/remote/oauth.js";
 import { createHttp } from "../../src/remote/http.js";
+import { createCatalog } from "../../src/remote/catalog.js";
 
 function required(value: string | null | undefined): string {
   if (!value) throw new Error("Missing response field");
@@ -27,6 +27,19 @@ let product: ReturnType<typeof createServer>;
 let issuer: string;
 let active = true;
 const connections = new Map<string, string[]>();
+const apiRequests: { method: string; path: string; key: string; body: string }[] = [];
+function apiKeyRow(id: number, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    name: `Client ${String(id)}`,
+    kind: "site",
+    status: "active",
+    token: `atai_upstream${String(id)}secret`,
+    token_hint: "cret",
+    usage_limit: 500,
+    ...overrides,
+  };
+}
 const cookies = new Map<string, { value: string; path: string }>();
 const assistantCallback = "https://assistant.example/callback";
 const vsCodeRedirects = [
@@ -145,7 +158,10 @@ beforeAll(async () => {
     }),
   });
   product = createServer((req, res) => {
-    if (req.headers.authorization !== `Bearer ${"b".repeat(32)}`) {
+    if (
+      !(req.url ?? "").startsWith("/api/v1/") &&
+      req.headers.authorization !== `Bearer ${"b".repeat(32)}`
+    ) {
       res.writeHead(401).end();
       return;
     }
@@ -154,6 +170,28 @@ beforeAll(async () => {
       body += chunk.toString();
     });
     req.on("end", () => {
+      res.setHeader("Content-Type", "application/json");
+      if ((req.url ?? "").startsWith("/api/v1/")) {
+        const path = req.url ?? "";
+        apiRequests.push({
+          method: req.method ?? "",
+          path,
+          key: String(req.headers["x-api-key"]),
+          body,
+        });
+        if (req.method === "PATCH") {
+          res.end(JSON.stringify(apiKeyRow(1, JSON.parse(body) as Record<string, unknown>)));
+        } else {
+          res.end(
+            JSON.stringify({
+              api_keys: [apiKeyRow(1), apiKeyRow(2)],
+              next_cursor: null,
+              has_more: false,
+            }),
+          );
+        }
+        return;
+      }
       const id =
         req.method === "POST"
           ? (JSON.parse(body) as { code: string }).code
@@ -176,10 +214,11 @@ beforeAll(async () => {
   store = new OAuthStore(redis, config.namespace, config.encryptionKey);
   const bridge = new ProductBridge(config);
   const oauth = createOAuth(config, store, bridge);
+  const catalog = createCatalog(config.productOrigin);
   server = createHttp(config, store, bridge, oauth, {
-    readTools: new Set(["whoami"]),
+    permissions: new Map([...catalog.permissions, ["whoami", "read"]]),
     create: (key) => {
-      const s = new McpServer({ name: "test", version: "1" });
+      const s = catalog.create(key);
       s.registerTool("whoami", {}, () => ({ content: [{ type: "text", text: key }] }));
       return s;
     },
@@ -317,7 +356,19 @@ async function authorize(
   expect(token.refresh_token).toBeTypeOf("string");
   return { token, exchange, client };
 }
-async function toolCall(token: string, name = "whoami") {
+async function rpc(token: string, method: string, params: Record<string, unknown>) {
+  return fetch(`${issuer}/mcp`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+  });
+}
+async function toolCall(token: string, name = "whoami", args: Record<string, unknown> = {}) {
+  if (Object.keys(args).length) return rpc(token, "tools/call", { name, arguments: args });
   return fetch(`${issuer}/mcp`, {
     method: "POST",
     headers: {
@@ -515,7 +566,7 @@ describe("HTTP OAuth and MCP", () => {
       scopes,
       null,
     );
-    expect(client.scope).toBe("openid mcp:read mcp:write");
+    expect(client.scope).toBe("openid mcp:read mcp:write mcp:keys");
     expect(token.id_token).toBeTypeOf("string");
     expect((await toolCall(token.access_token)).status).toBe(200);
   });
@@ -592,5 +643,65 @@ describe("HTTP OAuth and MCP", () => {
       },
     );
     expect((await toolCall(token.access_token)).status).toBe(200);
+  });
+  it("lists key tools for a connection without mcp:keys and refuses their calls naming it", async () => {
+    const { token } = await authorize("keys-missing");
+    const listed = (await (await rpc(token.access_token, "tools/list", {})).json()) as {
+      result: { tools: { name: string }[] };
+    };
+    const names = listed.result.tools.map((tool) => tool.name);
+    expect(names).toEqual(expect.arrayContaining(["list_api_keys", "update_api_key"]));
+    const denied = await toolCall(token.access_token, "list_api_keys");
+    expect(denied.status).toBe(403);
+    const hint = /scope="([^"]+)"/.exec(denied.headers.get("www-authenticate") ?? "")?.[1];
+    expect(hint?.split(" ")).toEqual(["openid", "mcp:read", "mcp:write", "mcp:keys"]);
+    const body = (await denied.json()) as Record<string, string>;
+    expect(body).toMatchObject({ error: "insufficient_scope", required_scope: "mcp:keys" });
+    expect(body["error_description"]).toContain("Manage API keys");
+    expect(apiRequests.filter((r) => r.key === "upstream-key-keys-missing")).toEqual([]);
+  });
+  it("lets a metadata-registered client step up to mcp:keys, then list and update keys", async () => {
+    const metadata = (await (
+      await fetch(`${issuer}/.well-known/oauth-protected-resource/mcp`)
+    ).json()) as { scopes_supported: string[] };
+    expect(metadata.scopes_supported).toContain("mcp:keys");
+    const scopes = ["mcp:read", "mcp:write", "mcp:keys"];
+    const { token } = await authorize(
+      "keys-granted",
+      scopes,
+      ["openid", ...scopes],
+      metadata.scopes_supported,
+    );
+    const listed = await toolCall(token.access_token, "list_api_keys", { limit: 25 });
+    const listText = await listed.text();
+    expect(listed.status, listText).toBe(200);
+    expect(listText).toContain("Client 2");
+    expect(listText).not.toContain("atai_");
+    const updated = await toolCall(token.access_token, "update_api_key", {
+      id: 1,
+      usage_limit: null,
+    });
+    const reply = (await updated.json()) as {
+      result: { isError?: boolean; structuredContent: Record<string, unknown> };
+    };
+    expect(reply.result.isError).toBeFalsy();
+    expect(reply.result.structuredContent).toMatchObject({ id: 1, usage_limit: null });
+    expect(JSON.stringify(reply)).not.toContain("atai_");
+    const calls = apiRequests.filter((r) => r.key === "upstream-key-keys-granted");
+    expect(calls.map((r) => `${r.method} ${r.path}`)).toEqual([
+      "GET /api/v1/api_keys?limit=25",
+      "PATCH /api/v1/api_keys/1",
+    ]);
+    expect(JSON.parse(required(calls[1]?.body))).toEqual({ usage_limit: null });
+  });
+  it("requires mcp:write as well as mcp:keys to change keys", async () => {
+    const scopes = ["mcp:read", "mcp:keys"];
+    const { token } = await authorize("keys-read-only", scopes);
+    expect((await toolCall(token.access_token, "list_api_keys", { limit: 5 })).status).toBe(200);
+    const denied = await toolCall(token.access_token, "rotate_api_key", { id: 1 });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({ required_scope: "mcp:write" });
+    const hint = /scope="([^"]+)"/.exec(denied.headers.get("www-authenticate") ?? "")?.[1];
+    expect(hint?.split(" ")).toEqual(["openid", "mcp:read", "mcp:write", "mcp:keys"]);
   });
 });

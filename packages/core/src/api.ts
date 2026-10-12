@@ -1,5 +1,9 @@
 import type {
   AccountRecord,
+  ApiKeyChanges,
+  ApiKeyHistory,
+  ApiKeyList,
+  ApiKeyRecord,
   BulkCreateResult,
   GenerateOptions,
   ImageListResult,
@@ -20,18 +24,24 @@ export class AltTextApiError extends Error {
   readonly status: number;
   readonly errorCode: string | null;
   readonly errors: Readonly<Record<string, readonly string[]>>;
+  readonly requiredScope: string | null;
+  readonly retryAfter: number | null;
 
   constructor(opts: {
     status: number;
     errorCode: string | null;
     errors: Record<string, string[]>;
     message: string;
+    requiredScope?: string | null;
+    retryAfter?: number | null;
   }) {
     super(opts.message);
     this.name = "AltTextApiError";
     this.status = opts.status;
     this.errorCode = opts.errorCode;
     this.errors = opts.errors;
+    this.requiredScope = opts.requiredScope ?? null;
+    this.retryAfter = opts.retryAfter ?? null;
   }
 }
 
@@ -198,6 +208,71 @@ export class AltTextApi {
     return data as unknown as ScrapeResult;
   }
 
+  async listApiKeys(
+    opts: { after?: string; limit?: number; status?: string; q?: string } = {},
+  ): Promise<ApiKeyList> {
+    const query = this.buildQuery({
+      after: opts.after,
+      limit: opts.limit,
+      status: opts.status,
+      q: opts.q,
+    });
+    const { data } = await this.request("GET", "/api_keys", { query });
+    return data as unknown as ApiKeyList;
+  }
+
+  /** Reads one key; `reveal` makes the audited read that returns its token. */
+  async getApiKey(opts: { id: number; detail?: "full"; reveal?: boolean }): Promise<ApiKeyRecord> {
+    const query = this.buildQuery({
+      detail: opts.detail,
+      reveal: opts.reveal ? "true" : undefined,
+    });
+    const { data } = await this.request("GET", `/api_keys/${String(opts.id)}`, { query });
+    return data as unknown as ApiKeyRecord;
+  }
+
+  async createApiKey(opts: ApiKeyChanges & { idempotencyKey?: string }): Promise<ApiKeyRecord> {
+    const { data } = await this.request("POST", "/api_keys", {
+      body: keyChanges(opts),
+      idempotencyKey: opts.idempotencyKey,
+    });
+    return data as unknown as ApiKeyRecord;
+  }
+
+  async updateApiKey(
+    opts: ApiKeyChanges & { id: number; idempotencyKey?: string },
+  ): Promise<ApiKeyRecord> {
+    const { data } = await this.request("PATCH", `/api_keys/${String(opts.id)}`, {
+      body: keyChanges(opts),
+      idempotencyKey: opts.idempotencyKey,
+    });
+    return data as unknown as ApiKeyRecord;
+  }
+
+  async rotateApiKey(opts: { id: number; idempotencyKey?: string }): Promise<ApiKeyRecord> {
+    const { data } = await this.request("POST", `/api_keys/${String(opts.id)}/rotation`, {
+      idempotencyKey: opts.idempotencyKey,
+    });
+    return data as unknown as ApiKeyRecord;
+  }
+
+  async revokeApiKey(opts: { id: number; idempotencyKey?: string }): Promise<ApiKeyRecord> {
+    const { data } = await this.request("POST", `/api_keys/${String(opts.id)}/revocation`, {
+      idempotencyKey: opts.idempotencyKey,
+    });
+    return data as unknown as ApiKeyRecord;
+  }
+
+  async listApiKeyHistory(opts: {
+    id: number;
+    after?: string;
+    limit?: number;
+  }): Promise<ApiKeyHistory> {
+    const query = this.buildQuery({ after: opts.after, limit: opts.limit });
+    const { data } = await this.request("GET", `/api_keys/${String(opts.id)}/history`, { query });
+    return data as unknown as ApiKeyHistory;
+  }
+
   // -- Private helpers --
 
   private parseImageList(data: Record<string, unknown>, response: Response): ImageListResult {
@@ -233,7 +308,11 @@ export class AltTextApi {
   private async request(
     method: HttpMethod,
     path: string,
-    opts: { body?: Record<string, unknown>; query?: Record<string, string> } = {},
+    opts: {
+      body?: Record<string, unknown>;
+      query?: Record<string, string>;
+      idempotencyKey?: string;
+    } = {},
   ): Promise<{ data: Record<string, unknown>; response: Response }> {
     let url = `${this.baseUrl}${path}`;
     if (opts.query && Object.keys(opts.query).length > 0) {
@@ -245,6 +324,7 @@ export class AltTextApi {
       "X-Client": this.clientHeader,
       Accept: "application/json",
     };
+    if (opts.idempotencyKey !== undefined) headers["Idempotency-Key"] = opts.idempotencyKey;
 
     const fetchOpts: RequestInit = {
       method,
@@ -305,7 +385,16 @@ async function handleResponse(response: Response): Promise<Record<string, unknow
       (errorValues.length > 0 ? errorValues.join(", ") : null) ??
       `HTTP ${String(response.status)}`;
 
-    throw new AltTextApiError({ status: response.status, errorCode, errors, message });
+    const requiredScope = body["required_scope"];
+    const retryAfter = response.headers.get("retry-after");
+    throw new AltTextApiError({
+      status: response.status,
+      errorCode,
+      errors,
+      message,
+      requiredScope: typeof requiredScope === "string" ? requiredScope : null,
+      retryAfter: retryAfter === null ? null : safeParseInt(retryAfter, 0) || null,
+    });
   }
 
   return body;
@@ -333,6 +422,15 @@ function connectionError(err: unknown): AltTextApiError {
     errors: {},
     message: `Could not connect to AltText.ai API: ${message}`,
   });
+}
+
+function keyChanges(opts: ApiKeyChanges): Record<string, unknown> {
+  const body: Record<string, unknown> = {};
+  assignDefined(body, [
+    ["name", opts.name],
+    ["usage_limit", opts.usageLimit],
+  ]);
+  return body;
 }
 
 /** Copy entries into `target`, skipping undefined values. */

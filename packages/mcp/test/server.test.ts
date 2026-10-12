@@ -29,8 +29,10 @@ describe("server registration", () => {
       "list_images",
       "search_images",
     ]);
-    expect(operations.every((operation) => ["read", "write"].includes(operation.permission))).toBe(
-      true,
-    );
+    expect(
+      operations.every((operation) =>
+        ["read", "write", "keys_read", "keys_write"].includes(operation.permission),
+      ),
+    ).toBe(true);
   });
 });

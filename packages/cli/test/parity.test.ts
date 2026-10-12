@@ -9,7 +9,7 @@ import { buildCommandTable, CLI_ONLY_COMMANDS } from "../src/commands/registry.j
 const FILE_TOOLS = ["bulk_create", "generate_alt_text_from_file"];
 
 async function listMcpTools(localFiles: boolean): Promise<Tool[]> {
-  const server = createServer(new AltTextApi("test-key"), { localFiles });
+  const server = createServer(new AltTextApi("test-key"), { localFiles, keys: true });
   const client = new Client({ name: "parity", version: "1" });
   const [a, b] = InMemoryTransport.createLinkedPair();
   await server.connect(a);
@@ -21,7 +21,7 @@ async function listMcpTools(localFiles: boolean): Promise<Tool[]> {
 }
 
 describe.each([true, false])("registry parity with localFiles %s", (localFiles) => {
-  const operations = availableOperations({ localFiles });
+  const operations = availableOperations({ localFiles, keys: true });
   const commands = buildCommandTable({ localFiles });
   const names = operations.map((operation) => operation.name).sort();
 
@@ -68,11 +68,33 @@ describe.each([true, false])("registry parity with localFiles %s", (localFiles) 
   });
 });
 
+describe("key commands", () => {
+  it("puts all eight key operations in the command table under keys", () => {
+    const keyCommands = buildCommandTable()
+      .filter((command) => command.noun === "keys")
+      .map((command) => `${command.name}=${command.operation}`)
+      .sort();
+    expect(keyCommands).toEqual([
+      "keys create=create_api_key",
+      "keys get=get_api_key",
+      "keys history=list_api_key_history",
+      "keys list=list_api_keys",
+      "keys reveal=reveal_api_key_token",
+      "keys revoke=revoke_api_key",
+      "keys rotate=rotate_api_key",
+      "keys update=update_api_key",
+    ]);
+  });
+});
+
 describe("CLI-only carve-out", () => {
   it("names commands that no registry operation claims", () => {
     expect(CLI_ONLY_COMMANDS).toEqual(["login", "logout", "whoami"]);
     const claimed = new Set(
-      availableOperations().flatMap((operation) => [operation.name, operation.command.noun]),
+      availableOperations({ keys: true }).flatMap((operation) => [
+        operation.name,
+        operation.command.noun,
+      ]),
     );
     for (const name of CLI_ONLY_COMMANDS) expect(claimed.has(name)).toBe(false);
   });

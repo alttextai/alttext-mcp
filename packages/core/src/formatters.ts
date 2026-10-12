@@ -1,4 +1,12 @@
-import type { AccountRecord, ImageListResult, ImageRecord, ScrapeResult } from "./types.js";
+import type {
+  AccountRecord,
+  ApiKeyHistory,
+  ApiKeyList,
+  ApiKeyRecord,
+  ImageListResult,
+  ImageRecord,
+  ScrapeResult,
+} from "./types.js";
 
 /** Format a single image record for display. */
 export function formatImage(image: ImageRecord): string {
@@ -77,6 +85,10 @@ export function formatAccount(account: AccountRecord): string {
   lines.push(`No quotes: ${String(account.no_quotes)}`);
   if (account.ending_period) lines.push("Ending period: true");
   if (account.remove_symbols) lines.push("Remove symbols: true");
+  if (account.api_key) {
+    lines.push(`Key kind: ${account.api_key.kind}`);
+    lines.push(`Can manage keys: ${account.api_key.can_manage_keys ? "yes" : "no"}`);
+  }
 
   return lines.join("\n");
 }
@@ -114,5 +126,59 @@ export function formatScrapeResult(result: ScrapeResult, url: string): string {
     );
   }
 
+  return lines.join("\n");
+}
+
+/** Format one API key for display; never prints a token, only its last four characters. */
+export function formatApiKey(key: ApiKeyRecord): string {
+  const lines: string[] = [
+    `Key ${String(key.id)}: ${key.name ?? "(unnamed)"}`,
+    `Kind: ${key.kind}`,
+    `Status: ${key.status}`,
+  ];
+  if (key.token_hint) lines.push(`Token: …${key.token_hint}`);
+  if (typeof key["integration"] === "string") lines.push(`Integration: ${key["integration"]}`);
+  lines.push(
+    `Usage limit: ${typeof key.usage_limit === "number" ? String(key.usage_limit) : "Unlimited"}`,
+  );
+  if (typeof key["credits_used"] === "number")
+    lines.push(`Credits used: ${String(key["credits_used"])}`);
+  if (typeof key["billable_credits"] === "number")
+    lines.push(`Billable credits: ${String(key["billable_credits"])}`);
+  if (typeof key["last_used_at"] === "string") lines.push(`Last used: ${key["last_used_at"]}`);
+  if (typeof key["revoked_at"] === "string") lines.push(`Revoked: ${key["revoked_at"]}`);
+  if (key.integration_warning) lines.push(`Warning: ${key.integration_warning}`);
+  return lines.join("\n");
+}
+
+/** Format a page of API keys, masked. */
+export function formatApiKeyList(list: ApiKeyList): string {
+  const lines: string[] = [`${String(list.api_keys.length)} API keys`, ""];
+  if (list.api_keys.length === 0) lines.push("No API keys found.");
+  for (const key of list.api_keys) {
+    const hint = key.token_hint ? ` …${key.token_hint}` : "";
+    const limit = typeof key.usage_limit === "number" ? String(key.usage_limit) : "unlimited";
+    lines.push(
+      `- ${String(key.id)}: ${key.name ?? "(unnamed)"} [${key.kind}, ${key.status}]${hint} limit ${limit}`,
+    );
+  }
+  if (list.has_more && list.next_cursor) lines.push("", `More keys: after=${list.next_cursor}`);
+  return lines.join("\n");
+}
+
+/** Format a page of a key's history. */
+export function formatApiKeyHistory(id: number, history: ApiKeyHistory): string {
+  const lines: string[] = [`History for key ${String(id)}`, ""];
+  if (history.events.length === 0) lines.push("No changes recorded.");
+  for (const event of history.events) {
+    const actor = event.actor?.name ?? event.actor?.type ?? "unknown";
+    const change =
+      event.before || event.after
+        ? ` ${JSON.stringify(event.before ?? {})} -> ${JSON.stringify(event.after ?? {})}`
+        : "";
+    lines.push(`- ${event.created_at} ${event.action} by ${actor}${change}`);
+  }
+  if (history.has_more && history.next_cursor)
+    lines.push("", `More events: after=${history.next_cursor}`);
   return lines.join("\n");
 }
