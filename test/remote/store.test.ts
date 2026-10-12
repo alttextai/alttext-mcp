@@ -72,6 +72,15 @@ describe("durable OAuth adapter", () => {
     expect(await redis.hGet("test:Client:current", "scopes_v")).toBe("2");
     expect(await adapter.find("current")).toMatchObject({ scope: "openid mcp:read mcp:write" });
   });
+  it("keeps a client with no redirect URIs at its registered scope", async () => {
+    const adapter = store.adapter("Client");
+    await adapter.upsert("no-redirects", {
+      clientId: "no-redirects",
+      scope: "mcp:read",
+      redirect_uris: [],
+    });
+    expect(await adapter.find("no-redirects")).toMatchObject({ scope: "mcp:read" });
+  });
   it("keeps a client that mixes an OpenAI callback with its own at its registered scope", async () => {
     const adapter = store.adapter("Client");
     await adapter.upsert("mixed", {

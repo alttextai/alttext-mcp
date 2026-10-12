@@ -652,6 +652,32 @@ describe("HTTP OAuth and MCP", () => {
     const whoami = result.tools.find((tool) => tool.name === "whoami");
     expect(whoami?.securitySchemes).toEqual([{ type: "oauth2", scopes: ["mcp:read"] }]);
     expect(whoami?._meta?.["securitySchemes"]).toEqual(whoami?.securitySchemes);
+    const mutate = result.tools.find((tool) => tool.name === "mutate");
+    expect(mutate).toBeDefined();
+    expect(mutate).not.toHaveProperty("securitySchemes");
+    const called = (await (await toolCall(token.access_token)).json()) as {
+      result: Record<string, unknown>;
+    };
+    expect(called.result).toEqual({ content: [{ type: "text", text: "upstream-key-tool-list" }] });
+  });
+  it("falls back to a 403 challenge when a ChatGPT token's client record is gone", async () => {
+    let clientId = "";
+    const { token } = await authorize(
+      "chatgpt-missing-client",
+      ["mcp:read"],
+      ["mcp:read"],
+      ["mcp:read"],
+      undefined,
+      (id) => {
+        clientId = id;
+        return Promise.resolve();
+      },
+      { registered: [chatGptCallback], requested: chatGptCallback },
+    );
+    expect(await redis.del(`${store.namespace}:Client:${clientId}`)).toBe(1);
+    const denied = await toolCall(token.access_token, "mutate");
+    expect(denied.status).toBe(403);
+    expect(denied.headers.get("www-authenticate")).toContain('error="insufficient_scope"');
   });
   it("never lets live scopes exceed the consented scopes on an OpenID-only token", async () => {
     const { token } = await authorize("openid-read-only", ["mcp:read"], ["openid"]);
