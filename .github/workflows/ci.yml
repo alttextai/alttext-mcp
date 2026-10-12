@@ -22,4 +22,9 @@ jobs:
       - run: npm run format:check
       - run: npm run typecheck
       - run: npm run build
+      - run: npm run skills:validate
+      - name: Check npx skills discovers the skill
+        run: npx -y skills@1.7.0 add . --list
+        env:
+          DISABLE_TELEMETRY: "1"
       - run: npm test

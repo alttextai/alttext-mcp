@@ -20,7 +20,8 @@
     "test:watch": "vitest",
     "version:stamp": "node scripts/stamp-version.mjs",
     "version:check": "node scripts/stamp-version.mjs --check",
-    "check": "npm run version:check && npm run lint && npm run format:check && npm run typecheck && npm run build && npm test"
+    "check": "npm run version:check && npm run lint && npm run format:check && npm run typecheck && npm run build && npm run skills:validate && npm test",
+    "skills:validate": "node scripts/validate-skills.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
