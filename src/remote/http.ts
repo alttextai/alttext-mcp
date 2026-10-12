@@ -236,11 +236,9 @@ export function createHttp(
   }
 
   async function mcp(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const resourceMetadata = `${config.issuer}/.well-known/oauth-protected-resource/mcp`;
     const deny = (): void => {
-      res.setHeader(
-        "WWW-Authenticate",
-        `Bearer resource_metadata="${config.issuer}/.well-known/oauth-protected-resource/mcp"`,
-      );
+      res.setHeader("WWW-Authenticate", `Bearer resource_metadata="${resourceMetadata}"`);
       send(res, 401, { error: "invalid_token" });
     };
     const match = /^Bearer ([^\s]+)$/i.exec(req.headers.authorization ?? "");
@@ -300,7 +298,7 @@ export function createHttp(
       !catalog.readTools.has(request.params?.name ?? "") &&
       !scopes.includes("mcp:write")
     ) {
-      const challenge = `Bearer resource_metadata="${config.issuer}/.well-known/oauth-protected-resource/mcp", error="insufficient_scope", error_description="Reconnect AltText.ai and allow write access to use this tool", scope="openid mcp:read mcp:write"`;
+      const challenge = `Bearer resource_metadata="${resourceMetadata}", error="insufficient_scope", error_description="Reconnect AltText.ai and allow write access to use this tool", scope="openid mcp:read mcp:write"`;
       const client = await oauth.Client.find(String(token.clientId));
       // ChatGPT ignores an HTTP 403 and only re-links with the scope named in a tool-result challenge
       if (client && isOpenAIClient(client.metadata())) {

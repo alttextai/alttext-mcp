@@ -181,6 +181,7 @@ beforeAll(async () => {
     create: (key) => {
       const s = new McpServer({ name: "test", version: "1" });
       s.registerTool("whoami", {}, () => ({ content: [{ type: "text", text: key }] }));
+      s.registerTool("mutate", {}, () => ({ content: [{ type: "text", text: `mutated ${key}` }] }));
       return s;
     },
   });
@@ -247,6 +248,7 @@ async function authorize(
   beforeCallback?: (interactionId: string) => Promise<void>,
   afterRegistration?: (clientId: string) => Promise<void>,
   redirect = { registered: [assistantCallback], requested: assistantCallback },
+  existingClientId?: string,
 ) {
   connections.set(connectionId, scopes);
   const discovery = (await (
@@ -254,7 +256,9 @@ async function authorize(
   ).json()) as { issuer: string; code_challenge_methods_supported: string[] };
   expect(discovery.issuer).toBe(issuer);
   expect(discovery.code_challenge_methods_supported).toEqual(["S256"]);
-  const client = await register(registrationScopes?.join(" "), redirect.registered);
+  const client = existingClientId
+    ? { client_id: existingClientId, scope: "" }
+    : await register(registrationScopes?.join(" "), redirect.registered);
   await afterRegistration?.(client.client_id);
   const verifier = randomBytes(32).toString("base64url");
   const auth = authorizationUrl(
@@ -591,32 +595,37 @@ describe("HTTP OAuth and MCP", () => {
     const denied = await toolCall(readOnly.token.access_token, "mutate");
     expect(denied.status).toBe(200);
     const reply = (await denied.json()) as {
+      id: number;
       result: { isError: boolean; _meta: Record<string, string[]> };
     };
+    expect(reply.id).toBe(1);
     expect(reply.result.isError).toBe(true);
     const challenge = required(reply.result._meta["mcp/www_authenticate"]?.[0]);
     expect(challenge).toContain('error="insufficient_scope"');
     expect(challenge).toContain(
       `resource_metadata="${issuer}/.well-known/oauth-protected-resource/mcp"`,
     );
-    const hint = /scope="([^"]+)"/.exec(challenge)?.[1];
-    const verifier = randomBytes(32).toString("base64url");
-    const stepUp = await browser(
-      authorizationUrl(clientId, required(hint), verifier, chatGptCallback).href,
+    const hint = required(/scope="([^"]+)"/.exec(challenge)?.[1]);
+    const stepUp = await authorize(
+      "chatgpt-step-up",
+      ["mcp:read", "mcp:write"],
+      hint.split(" "),
+      null,
+      async (id) => {
+        const handoff = await store.get<{ scopes: string[] }>("Handoff", id);
+        expect(handoff?.scopes).toEqual(["mcp:read", "mcp:write"]);
+      },
+      undefined,
+      { registered: [chatGptCallback], requested: chatGptCallback },
+      clientId,
     );
-    expect(stepUp.headers.get("location")).not.toContain("error=");
-    const consent = await browser(new URL(required(stepUp.headers.get("location")), issuer).href);
-    const handoff = JSON.parse(
-      Buffer.from(
-        required(
-          required(
-            new URL(required(consent.headers.get("location"))).searchParams.get("handoff"),
-          ).split(".")[0],
-        ),
-        "base64url",
-      ).toString(),
-    ) as { scopes: string[] };
-    expect(handoff.scopes).toEqual(["mcp:read", "mcp:write"]);
+    const written = await toolCall(stepUp.token.access_token, "mutate");
+    expect(written.status).toBe(200);
+    const result = (await written.json()) as {
+      result: { isError?: boolean; content: { text: string }[] };
+    };
+    expect(result.result.isError).toBeFalsy();
+    expect(result.result.content[0]?.text).toBe("mutated upstream-key-chatgpt-step-up");
   });
   it("never lets live scopes exceed the consented scopes on an OpenID-only token", async () => {
     const { token } = await authorize("openid-read-only", ["mcp:read"], ["openid"]);

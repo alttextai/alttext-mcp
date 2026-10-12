@@ -14,8 +14,9 @@ describe("hosted tool catalog", () => {
     await client.close();
     expect(tools.map((tool) => tool.name)).toContain("generate_alt_text");
     expect(tools.map((tool) => tool.name)).not.toContain("generate_alt_text_from_file");
+    const reads = ["get_account", "get_image", "list_images", "search_images"];
     for (const tool of tools) {
-      const scopes = catalog.readTools.has(tool.name) ? ["mcp:read"] : ["mcp:read", "mcp:write"];
+      const scopes = reads.includes(tool.name) ? ["mcp:read"] : ["mcp:read", "mcp:write"];
       expect(tool._meta?.["securitySchemes"], tool.name).toEqual([{ type: "oauth2", scopes }]);
     }
   });

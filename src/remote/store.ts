@@ -66,7 +66,7 @@ export class OAuthStore {
         const previous = await find(id);
         const tx = this.redis.multi().hSet(key(id), "payload", this.encrypt(payload, key(id)));
         if (ttl !== undefined) tx.expire(key(id), ttl);
-        // marking only new records keeps a re-saved legacy client from narrowing to mcp:read
+        // records the registration era only; find() no longer gates on it
         if (model === "Client" && !previous) tx.hSet(key(id), "scopes_v", "2");
         for (const field of ["uid", "userCode"] as const) {
           const value = payload[field];
