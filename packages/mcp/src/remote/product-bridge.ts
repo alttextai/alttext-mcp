@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 import type { RemoteConfig } from "./config.js";
+import { MCP_SCOPES } from "./scopes.js";
 
 export interface Connection {
   active?: boolean;
@@ -66,7 +67,7 @@ export class ProductBridge {
       typeof value.account_id === "string" &&
       Array.isArray(value.scopes) &&
       value.scopes.includes("mcp:read") &&
-      value.scopes.every((s) => ["mcp:read", "mcp:write", "mcp:keys"].includes(s)) &&
+      value.scopes.every((s) => MCP_SCOPES.includes(s)) &&
       Number.isFinite(Date.parse(value.expires_at)) &&
       Date.parse(value.expires_at) > Date.now()
     );

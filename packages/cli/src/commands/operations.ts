@@ -13,7 +13,6 @@ import {
   revealApiKeyToken,
   rotateApiKey,
   runOperation,
-  withoutToken,
   type AltTextApi,
   type Operation,
 } from "@alttext_ai/core";
@@ -272,11 +271,7 @@ async function getKeyWithToken(
     writeJson(context.io, { ...key, token });
     return;
   }
-  const text = formatApiKey(withoutToken(raw))
-    .split("\n")
-    .filter((line) => !line.startsWith("Token: "));
-  text.splice(3, 0, `Token: ${token ?? "(none)"}`);
-  writeLine(context.io.stdout, text.join("\n"));
+  writeLine(context.io.stdout, formatApiKey(raw, { token }));
 }
 
 function printIssued(context: Context, operation: Operation, key: Target): void {
@@ -342,7 +337,6 @@ async function execute(
   }
 }
 
-/** Adds one registry command under its noun, with flags generated from the input schema. */
 export function addOperationCommand(
   parent: CommanderCommand,
   command: Command,

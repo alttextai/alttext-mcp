@@ -200,6 +200,23 @@ describe("credentials and whoami", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["empty", ""],
+    ["corrupt", '{"api_key": "atai_'],
+    ["null", "null"],
+    ["an array", '["atai_x"]'],
+  ])("treats a credentials file that is %s as no stored key", async (_label, contents) => {
+    const io = testIo({ keychain: fakeKeychain() });
+    const path = credentialsPath(io.env, io.homedir);
+    mkdirSync(join(path, ".."), { recursive: true });
+    writeFileSync(path, contents, { mode: 0o600 });
+    const fetchMock = mockApi({});
+
+    expect(await run(["whoami"], io)).toBe(3);
+    expect(io.err()).toContain("alttext login");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("honors ALTTEXT_API_BASE_URL", async () => {
     const io = testIo({
       env: { ...ENV_KEY, ALTTEXT_API_BASE_URL: "http://localhost:3000/api/v1" },
@@ -317,7 +334,7 @@ describe("keys get", () => {
     expect(masked.out()).toMatch(/Status: active/);
     expect(masked.out()).toContain("…0007");
     expect(masked.out()).not.toContain("atai_");
-    expect(full.out()).toContain(keyRow(7)["token"] as string);
+    expect(full.out()).toContain(`Status: active\nToken: ${keyRow(7)["token"] as string}\n`);
   });
 });
 
@@ -463,6 +480,20 @@ describe("destructive commands", () => {
       "POST /api_keys/4/rotation",
     ]);
     expect(io.out()).toBe("atai_rotated000000000000004\n");
+  });
+
+  it.each([
+    [["keys", "revoke", "4", "--yes"], "POST /api_keys/4/revocation"],
+    [["keys", "update", "4", "--name", "Renamed"], "PATCH /api_keys/4"],
+  ])("%j sends no idempotency key and prints none", async (argv, route) => {
+    const io = testIo({ env: ENV_KEY });
+    const fetchMock = mockApi({ "GET /api_keys/4": json(keyRow(4)), [route]: json(keyRow(4)) });
+
+    expect(await run(argv, io)).toBe(0);
+    expect(requests(fetchMock).map((r) => `${r.method} ${r.path}`)).toContain(route);
+    const sent = fetchMock.mock.calls.map((_call, index) => headersOf(fetchMock, index));
+    expect(sent.filter((headers) => "Idempotency-Key" in headers)).toEqual([]);
+    expect(io.err()).not.toContain("Idempotency key");
   });
 
   it("says revocation can't be undone and stops when declined", async () => {

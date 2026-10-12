@@ -38,12 +38,12 @@ export interface AccountRecord {
   readonly whitelabel: boolean;
   readonly no_quotes: boolean;
   readonly ending_period?: boolean;
-  readonly remove_symbols?: boolean;
+  readonly remove_symbols?: readonly string[] | null;
   readonly subscription?: unknown;
   readonly api_key?: CallingKey;
 }
 
-/** The key that made the request, as GET /account describes it. */
+/** the key that made the request, as GET /account describes it */
 export interface CallingKey {
   readonly kind: string;
   readonly can_manage_keys: boolean;
@@ -51,7 +51,7 @@ export interface CallingKey {
   readonly origin?: string | null;
 }
 
-/** An API key as /api/v1/api_keys returns it; token is absent once revoked. */
+/** token is absent once the key is revoked */
 export interface ApiKeyRecord {
   readonly id: number;
   readonly name: string | null;
@@ -64,14 +64,12 @@ export interface ApiKeyRecord {
   readonly [field: string]: unknown;
 }
 
-/** One cursor page of API keys. */
 export interface ApiKeyList {
   readonly api_keys: readonly ApiKeyRecord[];
   readonly next_cursor: string | null;
   readonly has_more: boolean;
 }
 
-/** One recorded change to an API key. */
 export interface ApiKeyEvent {
   readonly id: number;
   readonly action: string;
@@ -81,14 +79,13 @@ export interface ApiKeyEvent {
   readonly created_at: string;
 }
 
-/** One cursor page of a key's history. */
 export interface ApiKeyHistory {
   readonly events: readonly ApiKeyEvent[];
   readonly next_cursor: string | null;
   readonly has_more: boolean;
 }
 
-/** Fields a key create or update sends; a null usage limit means unlimited. */
+/** a null usage limit means unlimited */
 export interface ApiKeyChanges {
   readonly name?: string;
   readonly usageLimit?: number | null;
@@ -106,15 +103,15 @@ export interface ScrapeResult {
 export interface ScrapedImage {
   readonly src?: string;
   readonly alt?: string;
-  readonly width?: number;
-  readonly height?: number;
+  readonly width?: number | string | null;
+  readonly height?: number | string | null;
   readonly skip_reason?: string;
 }
 
 /** Result from the bulk_create endpoint. */
 export interface BulkCreateResult {
   readonly rows?: number;
-  readonly row_errors?: readonly string[];
+  readonly row_errors?: readonly (readonly [number, string])[];
   readonly error?: string;
 }
 

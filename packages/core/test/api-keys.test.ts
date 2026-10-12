@@ -70,7 +70,7 @@ describe("key operations in the registry", () => {
     const expected: Record<string, [string, string]> = {
       list_api_keys: ["keys_read", "list"],
       get_api_key: ["keys_read", "get"],
-      reveal_api_key_token: ["keys_read", "reveal"],
+      reveal_api_key_token: ["keys_write", "reveal"],
       create_api_key: ["keys_write", "create"],
       update_api_key: ["keys_write", "update"],
       rotate_api_key: ["keys_write", "rotate"],
@@ -202,6 +202,26 @@ describe("create_api_key", () => {
   });
 });
 
+describe("key name length", () => {
+  it.each(["create_api_key", "update_api_key"])(
+    "%s accepts the server's 128 characters, no more",
+    (name) => {
+      const input = operation(name).input;
+      expect(input.safeParse({ id: 1, name: "a".repeat(128) }).success).toBe(true);
+      expect(input.safeParse({ id: 1, name: "a".repeat(129) }).success).toBe(false);
+    },
+  );
+});
+
+describe("idempotency keys", () => {
+  it("are offered only where the server honors them, on create and rotate", () => {
+    const offering = operations
+      .filter((item) => "idempotency_key" in item.input.shape)
+      .map((item) => item.name);
+    expect(offering).toEqual(["create_api_key", "rotate_api_key"]);
+  });
+});
+
 describe("update_api_key", () => {
   it("sends a null usage limit to make the key unlimited and returns no token", async () => {
     fetchMock.mockResolvedValueOnce(json(keyRow(3, { usage_limit: null })));
@@ -209,14 +229,13 @@ describe("update_api_key", () => {
     const result = await runOperation(operation("update_api_key"), api, {
       id: 3,
       usage_limit: null,
-      idempotency_key: "upd-1",
     });
 
     const { url, init } = requestAt(0);
     expect(url.pathname).toBe("/api/v1/api_keys/3");
     expect(init.method).toBe("PATCH");
     expect(JSON.parse(init.body as string)).toEqual({ usage_limit: null });
-    expect(headersAt(0)["Idempotency-Key"]).toBe("upd-1");
+    expect(headersAt(0)).not.toHaveProperty("Idempotency-Key");
     expect(result.text).not.toContain("atai_");
     expect(JSON.stringify(result.structured)).not.toContain("atai_");
     expect(result.text).toContain("Unlimited");
@@ -259,6 +278,7 @@ describe("rotate_api_key and revoke_api_key", () => {
     const { url, init } = requestAt(0);
     expect(url.pathname).toBe("/api/v1/api_keys/4/revocation");
     expect(init.method).toBe("POST");
+    expect(headersAt(0)).not.toHaveProperty("Idempotency-Key");
     expect(result.structured).toMatchObject({ status: "revoked", integration_warning: warning });
     expect(result.text).toContain(warning);
   });

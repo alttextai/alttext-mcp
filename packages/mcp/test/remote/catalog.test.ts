@@ -4,8 +4,14 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createCatalog } from "../../src/remote/catalog.js";
 
 const reads = ["get_account", "get_image", "list_images", "search_images"];
-const keyReads = ["list_api_keys", "get_api_key", "reveal_api_key_token", "list_api_key_history"];
-const keyWrites = ["create_api_key", "update_api_key", "rotate_api_key", "revoke_api_key"];
+const keyReads = ["list_api_keys", "get_api_key", "list_api_key_history"];
+const keyWrites = [
+  "reveal_api_key_token",
+  "create_api_key",
+  "update_api_key",
+  "rotate_api_key",
+  "revoke_api_key",
+];
 
 function expectedScopes(name: string): string[] {
   if (reads.includes(name)) return ["mcp:read"];

@@ -64,7 +64,7 @@ alttext keys create --name "Acme Bakery" --usage-limit 500 | gh secret set ALTTE
 ## Retries, rate limits and idempotency
 
 - **Exit 7** means rate limited. The error ends with `Retry in N seconds.`; wait at least that long before the next call. If it says `Retry later.`, wait 30 seconds, then a minute. Don't retry in a tight loop, and stop and tell the person after three attempts.
-- Key changes (`keys create`, `keys update`, `keys rotate`, `keys revoke`) take `--idempotency-key`. When you leave it out, the CLI generates one and prints `Idempotency key: <value>` to stderr. When you retry a create or rotate after a timeout, a network error or exit 7, pass that same value so the key is created or rotated once, not twice. Use a new value for a different change.
+- `keys create` and `keys rotate` take `--idempotency-key`. When you leave it out, the CLI generates one and prints `Idempotency key: <value>` to stderr. When you retry a create or rotate after a timeout, a network error or exit 7, pass that same value so the key is created or rotated once, not twice. Use a new value for a different change.
 - **Exit 6** is a conflict: the key is revoked (`key_revoked`), or the idempotency key clashes. On `request_in_progress`, wait and retry with the same value. On `idempotency_key_reused`, the value was used for a different request; don't force it.
 
 ## Keep key management apart from untrusted content

@@ -55,7 +55,7 @@ The `keys` commands need a full-access key. A site key gets exit code 4.
 | `--yes`                   | Run a destructive command without asking                                                                          |
 | `--dry-run`               | Read the target and print what a change would do, without changing anything                                       |
 | `--show-tokens`           | Show full tokens in `keys list` and `keys get`                                                                    |
-| `--idempotency-key <key>` | For key changes: reuse the same value when retrying. One is generated and printed to stderr when you leave it out |
+| `--idempotency-key <key>` | For `keys create` and `keys rotate`: reuse the same value when retrying. One is generated and printed to stderr when you leave it out |
 
 Results go to stdout. Errors, warnings and notes go to stderr. Color is used only on a terminal and never when `NO_COLOR` is set.
 

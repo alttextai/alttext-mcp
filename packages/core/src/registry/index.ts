@@ -35,7 +35,7 @@ export {
   type Permission,
 } from "./operation.js";
 
-/** Every operation, in the order MCP clients list them. */
+/** in the order MCP clients list them */
 export const operations: readonly Operation[] = [
   getAccount,
   updateAccount,
@@ -59,7 +59,6 @@ export const operations: readonly Operation[] = [
   listApiKeyHistory,
 ];
 
-/** Whether an operation manages API keys, which only some credentials and connections may do. */
 export function isKeyOperation(operation: Operation): boolean {
   return operation.permission === "keys_read" || operation.permission === "keys_write";
 }
@@ -69,10 +68,7 @@ export interface SurfaceOptions {
   readonly keys?: boolean;
 }
 
-/**
- * Operations available on a surface; local-file operations need files on the same machine,
- * and key operations are left out unless the surface opts in.
- */
+/** local-file operations need the same machine, and key operations need the surface to opt in */
 export function availableOperations(options: SurfaceOptions = {}): readonly Operation[] {
   return operations.filter(
     (operation) =>

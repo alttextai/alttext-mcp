@@ -10,7 +10,7 @@ export interface OperationAnnotations {
   readonly openWorldHint: boolean;
 }
 
-/** A read with no side effects that reaches out to the image library. */
+/** no side effects, but open-world since it reads the image library */
 export const READ: OperationAnnotations = {
   readOnlyHint: true,
   destructiveHint: false,
@@ -18,7 +18,6 @@ export const READ: OperationAnnotations = {
   openWorldHint: true,
 };
 
-/** Annotations for an operation that changes something. */
 export function change(hints: {
   destructive: boolean;
   idempotent: boolean;
@@ -42,7 +41,7 @@ interface HandlerResult {
   readonly structured: unknown;
 }
 
-/** One operation, shared by the MCP server and the CLI. */
+/** shared by the MCP server and the CLI */
 export interface Operation<
   I extends z.ZodObject = z.ZodObject,
   O extends z.ZodObject = z.ZodObject,
@@ -65,7 +64,7 @@ export function defineOperation<I extends z.ZodObject, O extends z.ZodObject>(
   return operation;
 }
 
-/** Runs an operation and checks its structured output against the declared schema. */
+/** checks the structured output against the declared schema */
 export async function runOperation<I extends z.ZodObject, O extends z.ZodObject>(
   operation: Operation<I, O>,
   api: AltTextApi,
@@ -75,7 +74,7 @@ export async function runOperation<I extends z.ZodObject, O extends z.ZodObject>
   return { text, structured: operation.output.parse(structured) };
 }
 
-/** JSON Schemas as MCP clients see them in tools/list. */
+/** the JSON Schemas MCP clients see in tools/list */
 export function operationJsonSchemas(operation: Operation): {
   input: Record<string, unknown>;
   output: Record<string, unknown>;

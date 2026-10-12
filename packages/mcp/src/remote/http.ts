@@ -44,7 +44,6 @@ function mirrorSecuritySchemes(message: JSONRPCMessage): JSONRPCMessage {
   );
   return { ...message, result: { ...message.result, tools } };
 }
-/** The MCP scopes in a space-separated scope string. */
 function mcpScopes(scope?: string): string[] {
   return (scope ?? "").split(" ").filter((s) => s.startsWith("mcp:"));
 }

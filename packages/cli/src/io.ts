@@ -6,14 +6,14 @@ export interface OutputStream {
   write(chunk: string): unknown;
 }
 
-/** The one stored key in the OS keychain; any method may throw when no keychain service runs. */
+/** any method may throw when no keychain service runs */
 export interface Keychain {
   get(): string | null;
   set(token: string): void;
   remove(): boolean;
 }
 
-/** Everything the CLI touches outside itself, so tests can run it without a terminal or keychain. */
+/** injected so tests can run the CLI without a terminal or keychain */
 export interface Io {
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly homedir: string;

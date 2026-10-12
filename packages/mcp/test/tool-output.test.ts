@@ -54,11 +54,12 @@ function respond(url: string, init: RequestInit = {}): Response {
       "total-count": "1",
     });
   }
-  if (path === "/images/bulk_create") return json({ rows: 3, row_errors: ["row 2: bad url"] });
+  if (path === "/images/bulk_create")
+    return json({ success: true, rows: 3, row_errors: [[2, "bad url"]], error: null });
   if (path === "/images/page_scrape") {
     return json({
       scraped_images: [
-        { src: "https://x.test/a.png", width: 10, height: 20 },
+        { src: "https://x.test/a.png", width: "10", height: "20" },
         { src: "https://x.test/b.png", skip_reason: "has alt" },
       ],
       total_processed: 1,
@@ -148,7 +149,7 @@ const cases: Array<[string, Record<string, unknown>, string, boolean]> = [
   [
     "bulk_create",
     { csv_file: csv },
-    "CSV import response: 3 rows. Generation runs asynchronously; this response does not confirm completion.\n\nErrors:\nrow 2: bad url",
+    "CSV import response: 3 rows. Generation runs asynchronously; this response does not confirm completion.\n\nErrors:\nRow 2: bad url",
     false,
   ],
   [

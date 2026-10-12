@@ -34,7 +34,6 @@ const BY_STATUS: Readonly<Record<number, ExitCode>> = {
   429: EXIT.rateLimited,
 };
 
-/** An error the CLI raises itself, carrying the exit code to finish with. */
 export class CliError extends Error {
   override readonly name = "CliError";
   readonly exitCode: ExitCode;

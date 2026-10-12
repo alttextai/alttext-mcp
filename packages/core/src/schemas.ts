@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-/** An optional page size of 1 to 100. */
 export function pageLimit(description: string) {
   return z.number().int().min(1).max(100).optional().describe(description);
 }

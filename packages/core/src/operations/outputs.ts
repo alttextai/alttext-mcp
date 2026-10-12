@@ -24,7 +24,7 @@ export const accountRecordSchema = z.looseObject({
   whitelabel: z.boolean().nullish(),
   no_quotes: z.boolean().nullish(),
   ending_period: z.boolean().nullish(),
-  remove_symbols: z.boolean().nullish(),
+  remove_symbols: z.array(z.string()).nullish(),
   subscription: z.unknown().optional(),
   key_kind: z.string().nullish(),
   can_manage_keys: z.boolean().optional(),
@@ -47,7 +47,7 @@ export const deletedImageSchema = z.object({
 
 export const bulkCreateResultSchema = z.looseObject({
   rows: z.number().nullish(),
-  row_errors: z.array(z.string()).nullish(),
+  row_errors: z.array(z.tuple([z.number(), z.string()])).nullish(),
   error: z.string().nullish(),
 });
 
@@ -57,8 +57,8 @@ export const scrapeResultSchema = z.looseObject({
     z.looseObject({
       src: z.string().nullish(),
       alt: z.string().nullish(),
-      width: z.number().nullish(),
-      height: z.number().nullish(),
+      width: z.union([z.number(), z.string()]).nullish(),
+      height: z.union([z.number(), z.string()]).nullish(),
       skip_reason: z.string().nullish(),
     }),
   ),

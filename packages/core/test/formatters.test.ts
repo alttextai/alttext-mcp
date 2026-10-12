@@ -119,7 +119,7 @@ describe("formatAccount", () => {
     expect(result).not.toContain("Remove symbols:");
   });
 
-  it("includes remove_symbols when true", () => {
+  it("lists the symbols remove_symbols holds", () => {
     const account: AccountRecord = {
       name: "Symbols",
       usage: 0,
@@ -127,9 +127,9 @@ describe("formatAccount", () => {
       default_lang: "en",
       whitelabel: false,
       no_quotes: false,
-      remove_symbols: true,
+      remove_symbols: ["#", "%"],
     };
-    expect(formatAccount(account)).toContain("Remove symbols: true");
+    expect(formatAccount(account)).toContain("Remove symbols: # %");
   });
 
   it("omits optional fields when absent", () => {

@@ -22,3 +22,4 @@ Build for the ECS runtime architecture with `docker buildx build --platform linu
 
 The trusted edge must limit actual `POST /register` requests by verified source IP. Do not pass an untrusted forwarded address into the application. Keep Rails `MCP_ENABLED=false` until the image, Redis access, DNS/TLS, shared secrets, and discovery endpoints are verified. Then enable Rails and complete live consent, token, read-tool, write-tool, revocation, and cross-account isolation checks.
 
+Roll out the hosted image only after app-alttext-ai PR #2294 is live in production. Until then the Rails handoff rejects the `mcp:keys` scope this image requests, so new and re-linked connections fail at consent.

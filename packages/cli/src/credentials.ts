@@ -29,11 +29,18 @@ async function readFileKey(path: string): Promise<string | null> {
   } catch {
     return null;
   }
-  const parsed = JSON.parse(contents) as { api_key?: unknown };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(contents);
+  } catch {
+    // an interrupted login can leave the file empty or truncated
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || !("api_key" in parsed)) return null;
   return typeof parsed.api_key === "string" && parsed.api_key !== "" ? parsed.api_key : null;
 }
 
-/** ALTTEXT_API_KEY, then the OS keychain, then the credentials file. */
+/** precedence: ALTTEXT_API_KEY, then the OS keychain, then the credentials file */
 export async function resolveCredential(io: Io): Promise<Credential | null> {
   const fromEnv = io.env["ALTTEXT_API_KEY"];
   if (fromEnv) return { apiKey: fromEnv, source: "env" };
@@ -58,7 +65,7 @@ async function writeCredentialsFile(path: string, apiKey: string): Promise<void>
   await chmod(path, 0o600);
 }
 
-/** Stores a verified key in the keychain, or the 0600 file when no keychain works. */
+/** falls back to the 0600 file when no keychain works */
 export async function storeCredential(io: Io, apiKey: string): Promise<"keychain" | "file"> {
   const path = credentialsPath(io.env, io.homedir);
   const keychain = await keychainOf(io);
@@ -75,7 +82,6 @@ export async function storeCredential(io: Io, apiKey: string): Promise<"keychain
   return "file";
 }
 
-/** Removes stored credentials and returns where they were found. */
 export async function removeCredentials(io: Io): Promise<("keychain" | "file")[]> {
   const removed: ("keychain" | "file")[] = [];
   const keychain = await keychainOf(io);

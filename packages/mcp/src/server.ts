@@ -56,7 +56,7 @@ export function createServer(api: AltTextApi, options: ServerOptions = {}): McpS
   return server;
 }
 
-/** Whether the credential may manage keys; any probe failure counts as no. */
+/** any probe failure counts as no */
 export async function canManageKeys(api: AltTextApi): Promise<boolean> {
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<never>((_, reject) => {
@@ -74,7 +74,7 @@ export async function canManageKeys(api: AltTextApi): Promise<boolean> {
   }
 }
 
-/** The local stdio server, with key tools only when its credential can use them. */
+/** key tools appear only when the credential can use them */
 export async function createLocalServer(api: AltTextApi): Promise<McpServer> {
   return createServer(api, { keys: await canManageKeys(api) });
 }

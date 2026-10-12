@@ -810,6 +810,20 @@ describe("HTTP OAuth and MCP", () => {
     const hint = /scope="([^"]+)"/.exec(denied.headers.get("www-authenticate") ?? "")?.[1];
     expect(hint?.split(" ")).toEqual(["openid", "mcp:read", "mcp:write", "mcp:keys"]);
   });
+  it("requires mcp:write as well as mcp:keys to reveal a key's token", async () => {
+    const { token } = await authorize("keys-read-only-reveal", ["mcp:read", "mcp:keys"]);
+    const denied = await toolCall(token.access_token, "reveal_api_key_token", { id: 1 });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({
+      error: "insufficient_scope",
+      required_scope: "mcp:write",
+    });
+    expect(
+      apiRequests.filter(
+        (r) => r.key === "upstream-key-keys-read-only-reveal" && r.path.includes("reveal"),
+      ),
+    ).toHaveLength(0);
+  });
   it("lets a ChatGPT client that registered read-only step up to mcp:keys", async () => {
     let clientId = "";
     const readOnly = await authorize(

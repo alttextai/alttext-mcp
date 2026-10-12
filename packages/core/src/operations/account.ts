@@ -4,7 +4,6 @@ import { change, defineOperation, READ } from "../registry/operation.js";
 import type { AccountRecord } from "../types.js";
 import { accountRecordSchema } from "./outputs.js";
 
-/** What the calling key is and whether it may manage keys. */
 export function keyAccess(account: AccountRecord): {
   key_kind: string | null;
   can_manage_keys: boolean;

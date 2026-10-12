@@ -25,7 +25,7 @@ const INTEGRATIONS: Readonly<Record<string, string>> = {
   wordpress_connect: "WordPress Connect",
 };
 
-/** Operations that confirm interactively and need --yes without a terminal. */
+/** without a terminal these need --yes, since they can't prompt */
 export const CONFIRMED_OPERATIONS: ReadonlySet<string> = new Set([
   rotateApiKey.name,
   revokeApiKey.name,
@@ -33,7 +33,7 @@ export const CONFIRMED_OPERATIONS: ReadonlySet<string> = new Set([
   updateAccount.name,
 ]);
 
-/** Reads what a change would act on, so a confirmation or dry run can name it. */
+/** read first so a confirmation or dry run can name what changes */
 export async function readTarget(
   api: AltTextApi,
   operation: Operation,
@@ -90,7 +90,6 @@ function changes(
   return listed.length > 0 ? listed.join(", ") : "no changes";
 }
 
-/** Describes what running the operation would do, naming the target and what can't be undone. */
 export function describeEffect(
   operation: Operation,
   input: Record<string, unknown>,

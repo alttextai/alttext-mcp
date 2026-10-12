@@ -18,7 +18,7 @@ export function style(enabled: boolean): Style {
   return { bold: ansi(1, 22), dim: ansi(2, 22), red: ansi(31, 39) };
 }
 
-/** Left-aligned columns padded to the widest cell; color is applied after padding. */
+/** color is applied after padding so escape codes don't skew column widths */
 export function table(
   headers: readonly string[],
   rows: readonly (readonly string[])[],

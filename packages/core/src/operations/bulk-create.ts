@@ -32,7 +32,10 @@ export const bulkCreate = defineOperation({
     const fileError = result.error;
 
     let text = `CSV import response: ${String(rows)} rows. Generation runs asynchronously; this response does not confirm completion.`;
-    if (rowErrors.length > 0) text += `\n\nErrors:\n${rowErrors.join("\n")}`;
+    if (rowErrors.length > 0) {
+      const lines = rowErrors.map(([row, message]) => `Row ${String(row)}: ${message}`);
+      text += `\n\nErrors:\n${lines.join("\n")}`;
+    }
     if (fileError) text += `\n\nFile error: ${fileError}`;
 
     return { text, structured: result };

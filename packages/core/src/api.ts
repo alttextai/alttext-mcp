@@ -221,7 +221,7 @@ export class AltTextApi {
     return data as unknown as ApiKeyList;
   }
 
-  /** Reads one key; `reveal` makes the audited read that returns its token. */
+  /** `reveal` makes the audited read that returns the token */
   async getApiKey(opts: { id: number; detail?: "full"; reveal?: boolean }): Promise<ApiKeyRecord> {
     const query = this.buildQuery({
       detail: opts.detail,
@@ -239,12 +239,9 @@ export class AltTextApi {
     return data as unknown as ApiKeyRecord;
   }
 
-  async updateApiKey(
-    opts: ApiKeyChanges & { id: number; idempotencyKey?: string },
-  ): Promise<ApiKeyRecord> {
+  async updateApiKey(opts: ApiKeyChanges & { id: number }): Promise<ApiKeyRecord> {
     const { data } = await this.request("PATCH", `/api_keys/${String(opts.id)}`, {
       body: keyChanges(opts),
-      idempotencyKey: opts.idempotencyKey,
     });
     return data as unknown as ApiKeyRecord;
   }
@@ -256,10 +253,8 @@ export class AltTextApi {
     return data as unknown as ApiKeyRecord;
   }
 
-  async revokeApiKey(opts: { id: number; idempotencyKey?: string }): Promise<ApiKeyRecord> {
-    const { data } = await this.request("POST", `/api_keys/${String(opts.id)}/revocation`, {
-      idempotencyKey: opts.idempotencyKey,
-    });
+  async revokeApiKey(opts: { id: number }): Promise<ApiKeyRecord> {
+    const { data } = await this.request("POST", `/api_keys/${String(opts.id)}/revocation`);
     return data as unknown as ApiKeyRecord;
   }
 

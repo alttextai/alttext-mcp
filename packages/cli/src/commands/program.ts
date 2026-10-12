@@ -78,7 +78,6 @@ function report(io: Io, error: unknown): number {
   return code;
 }
 
-/** Runs the CLI against user arguments and returns the exit code. */
 export async function run(argv: readonly string[], io: Io): Promise<number> {
   try {
     await buildProgram(io).parseAsync([...argv], { from: "user" });

@@ -84,7 +84,8 @@ export function formatAccount(account: AccountRecord): string {
   lines.push(`Whitelabel: ${String(account.whitelabel)}`);
   lines.push(`No quotes: ${String(account.no_quotes)}`);
   if (account.ending_period) lines.push("Ending period: true");
-  if (account.remove_symbols) lines.push("Remove symbols: true");
+  if (account.remove_symbols?.length)
+    lines.push(`Remove symbols: ${account.remove_symbols.join(" ")}`);
   if (account.api_key) {
     lines.push(`Key kind: ${account.api_key.kind}`);
     lines.push(`Can manage keys: ${account.api_key.can_manage_keys ? "yes" : "no"}`);
@@ -109,7 +110,7 @@ export function formatScrapeResult(result: ScrapeResult, url: string): string {
     for (const img of scraped) {
       const status = img.skip_reason ? `skipped: ${img.skip_reason}` : "queued";
       const dims =
-        img.width !== undefined && img.height !== undefined
+        img.width != null && img.height != null
           ? ` (${String(img.width)}x${String(img.height)})`
           : "";
       lines.push(`  - ${img.src ?? "(no src)"}${dims} [${status}]`);
@@ -129,14 +130,18 @@ export function formatScrapeResult(result: ScrapeResult, url: string): string {
   return lines.join("\n");
 }
 
-/** Format one API key for display; never prints a token, only its last four characters. */
-export function formatApiKey(key: ApiKeyRecord): string {
+/** prints only the token's last four characters unless the caller passes the token to show */
+export function formatApiKey(
+  key: ApiKeyRecord,
+  display: { readonly token?: string | null } = {},
+): string {
   const lines: string[] = [
     `Key ${String(key.id)}: ${key.name ?? "(unnamed)"}`,
     `Kind: ${key.kind}`,
     `Status: ${key.status}`,
   ];
-  if (key.token_hint) lines.push(`Token: …${key.token_hint}`);
+  if (display.token !== undefined) lines.push(`Token: ${display.token ?? "(none)"}`);
+  else if (key.token_hint) lines.push(`Token: …${key.token_hint}`);
   if (typeof key["integration"] === "string") lines.push(`Integration: ${key["integration"]}`);
   lines.push(
     `Usage limit: ${typeof key.usage_limit === "number" ? String(key.usage_limit) : "Unlimited"}`,
@@ -151,7 +156,6 @@ export function formatApiKey(key: ApiKeyRecord): string {
   return lines.join("\n");
 }
 
-/** Format a page of API keys, masked. */
 export function formatApiKeyList(list: ApiKeyList): string {
   const lines: string[] = [`${String(list.api_keys.length)} API keys`, ""];
   if (list.api_keys.length === 0) lines.push("No API keys found.");
@@ -166,7 +170,6 @@ export function formatApiKeyList(list: ApiKeyList): string {
   return lines.join("\n");
 }
 
-/** Format a page of a key's history. */
 export function formatApiKeyHistory(id: number, history: ApiKeyHistory): string {
   const lines: string[] = [`History for key ${String(id)}`, ""];
   if (history.events.length === 0) lines.push("No changes recorded.");

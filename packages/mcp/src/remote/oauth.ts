@@ -2,6 +2,7 @@ import Provider, { errors, type Configuration } from "oidc-provider";
 import type { RemoteConfig } from "./config.js";
 import type { OAuthStore } from "./store.js";
 import type { ProductBridge } from "./product-bridge.js";
+import { MCP_SCOPES, SCOPES } from "./scopes.js";
 
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "[::1]", "localhost"]);
 const APP_REDIRECTS = new Set(["cursor://anysphere.cursor-mcp/oauth/callback"]);
@@ -23,14 +24,14 @@ export function createOAuth(
     },
     clientAuthMethods: ["none", "client_secret_basic", "client_secret_post"],
     claims: {},
-    scopes: ["openid", "mcp:read", "mcp:write", "mcp:keys"],
+    scopes: SCOPES,
     responseTypes: ["code"],
     clientDefaults: {
       id_token_signed_response_alg: "ES256",
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       token_endpoint_auth_method: "none",
-      scope: "openid mcp:read mcp:write mcp:keys",
+      scope: SCOPES.join(" "),
     },
     pkce: { required: () => true },
     features: {
@@ -44,7 +45,7 @@ export function createOAuth(
         getResourceServerInfo: (_ctx, resource) => {
           if (resource !== config.resource) throw new errors.InvalidTarget();
           return {
-            scope: "mcp:read mcp:write mcp:keys",
+            scope: MCP_SCOPES.join(" "),
             audience: config.resource,
             accessTokenTTL: 900,
             accessTokenFormat: "opaque",

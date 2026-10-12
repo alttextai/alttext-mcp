@@ -6,7 +6,6 @@ import {
   type SurfaceOptions,
 } from "@alttext_ai/core";
 
-/** Commands that exist only on the CLI and map to no registry operation. */
 export const CLI_ONLY_COMMANDS: readonly string[] = ["login", "logout", "whoami"];
 
 export interface CommandFlag {
@@ -62,7 +61,7 @@ function toCommand(operation: Operation): Command {
   };
 }
 
-/** The CLI command table, one command per registry operation; the API refuses key commands to a site key. */
+/** key commands are always listed; the API refuses them to a site key */
 export function buildCommandTable(options: SurfaceOptions = {}): Command[] {
   return availableOperations({ keys: true, ...options }).map(toCommand);
 }

@@ -370,9 +370,13 @@ Global Options:
 
 Commands:
   list [options]          List the account's site API keys with usage and limits. Tokens are masked
-                          to their last four characters
+                          to their last four characters. billable_credits is the uncapped figure to
+                          bill; previous_period holds the last closed period, and billable_complete
+                          false there means it can be low. status "all" includes revoked keys
   get [options] <id>      Get one API key's details, usage and limit. The token is masked; use
-                          reveal_api_key_token to see it
+                          reveal_api_key_token to see it. billable_credits is the uncapped figure to
+                          bill; previous_period holds the last closed period, and billable_complete
+                          false there means it can be low
   reveal <id>             Show one API key's full token. The reveal is recorded in the key's
                           history. Only use when the person asks for this key's token
   create [options]        Create a site API key, optionally with a per-period credit limit. Returns
@@ -380,9 +384,13 @@ Commands:
   update [options] <id>   Rename an API key or change its per-period credit limit (null removes the
                           limit)
   rotate [options] <id>   Replace an API key's token. The old token stops working immediately.
-                          Returns the new token
-  revoke [options] <id>   Revoke an API key. Its token stops working immediately; the key and its
-                          usage stay readable
+                          Returns the new token. First confirm the key by name and id with the
+                          person, and check get_api_key's integration field: an integration key
+                          stops working until it reconnects
+  revoke <id>             Revoke an API key. Its token stops working immediately; the key and its
+                          usage stay readable. First confirm the key by name and id with the person,
+                          and check get_api_key's integration field: an integration key stops
+                          working until it reconnects
   history [options] <id>  List the recorded changes to one API key, newest first, with who made each
 "
 `;
@@ -412,7 +420,9 @@ Global Options:
 exports[`help > keys get --help matches its snapshot 1`] = `
 "Usage: alttext keys get [options] <id>
 
-Get one API key's details, usage and limit. The token is masked; use reveal_api_key_token to see it
+Get one API key's details, usage and limit. The token is masked; use reveal_api_key_token to see it.
+billable_credits is the uncapped figure to bill; previous_period holds the last closed period, and
+billable_complete false there means it can be low
 
 Arguments:
   id                The API key's ID
@@ -459,7 +469,8 @@ exports[`help > keys list --help matches its snapshot 1`] = `
 "Usage: alttext keys list [options]
 
 List the account's site API keys with usage and limits. Tokens are masked to their last four
-characters
+characters. billable_credits is the uncapped figure to bill; previous_period holds the last closed
+period, and billable_complete false there means it can be low. status "all" includes revoked keys
 
 Options:
   --after <value>   Cursor from a previous page's next_cursor
@@ -504,29 +515,32 @@ Global Options:
 exports[`help > keys revoke --help matches its snapshot 1`] = `
 "Usage: alttext keys revoke [options] <id>
 
-Revoke an API key. Its token stops working immediately; the key and its usage stay readable
+Revoke an API key. Its token stops working immediately; the key and its usage stay readable. First
+confirm the key by name and id with the person, and check get_api_key's integration field: an
+integration key stops working until it reconnects
 
 Arguments:
-  id                         The API key's ID
+  id             The API key's ID
 
 Options:
-  --idempotency-key <value>  Reuse the same value when retrying so the change happens once
-  -h, --help                 Show help
+  -h, --help     Show help
 
 Global Options:
-  -v, --version              Print the version
-  --json                     Print the result as JSON on stdout
-  --no-input                 Never prompt; fail instead when input is needed
-  --yes                      Run destructive commands without asking for confirmation
-  --dry-run                  Read the target and show what a change would do, without making it
-  --show-tokens              Show full tokens in keys list and keys get
+  -v, --version  Print the version
+  --json         Print the result as JSON on stdout
+  --no-input     Never prompt; fail instead when input is needed
+  --yes          Run destructive commands without asking for confirmation
+  --dry-run      Read the target and show what a change would do, without making it
+  --show-tokens  Show full tokens in keys list and keys get
 "
 `;
 
 exports[`help > keys rotate --help matches its snapshot 1`] = `
 "Usage: alttext keys rotate [options] <id>
 
-Replace an API key's token. The old token stops working immediately. Returns the new token
+Replace an API key's token. The old token stops working immediately. Returns the new token. First
+confirm the key by name and id with the person, and check get_api_key's integration field: an
+integration key stops working until it reconnects
 
 Arguments:
   id                         The API key's ID
@@ -557,7 +571,6 @@ Options:
   --name <value>             Key name, such as the client it belongs to
   --usage-limit <n-or-none>  Credits this key may use per billing period; null means unlimited (pass
                              "none" for null)
-  --idempotency-key <value>  Reuse the same value when retrying so the change happens once
   -h, --help                 Show help
 
 Global Options:

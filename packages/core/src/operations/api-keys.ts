@@ -21,7 +21,7 @@ const idempotencyKey = z
   .max(255)
   .optional()
   .describe("Reuse the same value when retrying so the change happens once");
-const name = z.string().min(1).max(256).describe("Key name, such as the client it belongs to");
+const name = z.string().min(1).max(128).describe("Key name, such as the client it belongs to");
 const usageLimit = z
   .number()
   .int()
@@ -29,10 +29,14 @@ const usageLimit = z
   .nullable()
   .describe("Credits this key may use per billing period; null means unlimited");
 
+const BILLING_NOTE =
+  "billable_credits is the uncapped figure to bill; previous_period holds the last closed period, and billable_complete false there means it can be low";
+const CONFIRM_NOTE =
+  "First confirm the key by name and id with the person, and check get_api_key's integration field: an integration key stops working until it reconnects";
+
 // unlike Omit, the remapped keys keep named fields on a record with an index signature
 export type WithoutToken<T> = { [K in keyof T as K extends "token" ? never : K]: T[K] };
 
-/** A copy of the record without its token. */
 export function withoutToken<T extends object>(record: T): WithoutToken<T> {
   const copy: Record<string, unknown> = { ...(record as object) };
   delete copy["token"];
@@ -42,8 +46,7 @@ export function withoutToken<T extends object>(record: T): WithoutToken<T> {
 export const listApiKeys = defineOperation({
   name: "list_api_keys",
   title: "List API Keys",
-  description:
-    "List the account's site API keys with usage and limits. Tokens are masked to their last four characters",
+  description: `List the account's site API keys with usage and limits. Tokens are masked to their last four characters. ${BILLING_NOTE}. status "all" includes revoked keys`,
   input: z.object({
     after: cursor,
     limit,
@@ -68,8 +71,7 @@ export const listApiKeys = defineOperation({
 export const getApiKey = defineOperation({
   name: "get_api_key",
   title: "Get API Key",
-  description:
-    "Get one API key's details, usage and limit. The token is masked; use reveal_api_key_token to see it",
+  description: `Get one API key's details, usage and limit. The token is masked; use reveal_api_key_token to see it. ${BILLING_NOTE}`,
   input: z.object({
     id: keyId,
     detail: z
@@ -98,7 +100,7 @@ export const revealApiKeyToken = defineOperation({
   input: z.object({ id: keyId }),
   output: revealedTokenSchema,
   annotations: change({ destructive: false, idempotent: true, openWorld: false }),
-  permission: "keys_read",
+  permission: "keys_write",
   localFilesOnly: false,
   command: { noun: "keys", verb: "reveal" },
   async handler(api, { id }) {
@@ -149,7 +151,6 @@ export const updateApiKey = defineOperation({
     id: keyId,
     name: name.optional(),
     usage_limit: usageLimit.optional(),
-    idempotency_key: idempotencyKey,
   }),
   output: maskedApiKeySchema,
   annotations: change({ destructive: true, idempotent: true, openWorld: false }),
@@ -162,7 +163,6 @@ export const updateApiKey = defineOperation({
         id: input.id,
         name: input.name,
         usageLimit: input.usage_limit,
-        idempotencyKey: input.idempotency_key,
       }),
     );
     return { text: `Updated key ${String(key.id)}:\n\n${formatApiKey(key)}`, structured: key };
@@ -172,8 +172,7 @@ export const updateApiKey = defineOperation({
 export const rotateApiKey = defineOperation({
   name: "rotate_api_key",
   title: "Rotate API Key",
-  description:
-    "Replace an API key's token. The old token stops working immediately. Returns the new token",
+  description: `Replace an API key's token. The old token stops working immediately. Returns the new token. ${CONFIRM_NOTE}`,
   input: z.object({ id: keyId, idempotency_key: idempotencyKey }),
   output: issuedApiKeySchema,
   annotations: change({ destructive: true, idempotent: false, openWorld: false }),
@@ -192,16 +191,15 @@ export const rotateApiKey = defineOperation({
 export const revokeApiKey = defineOperation({
   name: "revoke_api_key",
   title: "Revoke API Key",
-  description:
-    "Revoke an API key. Its token stops working immediately; the key and its usage stay readable",
-  input: z.object({ id: keyId, idempotency_key: idempotencyKey }),
+  description: `Revoke an API key. Its token stops working immediately; the key and its usage stay readable. ${CONFIRM_NOTE}`,
+  input: z.object({ id: keyId }),
   output: maskedApiKeySchema,
   annotations: change({ destructive: true, idempotent: true, openWorld: false }),
   permission: "keys_write",
   localFilesOnly: false,
   command: { noun: "keys", verb: "revoke" },
-  async handler(api, { id, idempotency_key }) {
-    const key = withoutToken(await api.revokeApiKey({ id, idempotencyKey: idempotency_key }));
+  async handler(api, { id }) {
+    const key = withoutToken(await api.revokeApiKey({ id }));
     return { text: `Revoked key ${String(key.id)}.\n\n${formatApiKey(key)}`, structured: key };
   },
 });
