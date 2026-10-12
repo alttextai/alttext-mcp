@@ -151,7 +151,7 @@ export function createHttp(
       const clientMcpScopes = (client.scope ?? "")
         .split(" ")
         .filter((scope) => scope.startsWith("mcp:"));
-      // an OpenID-only request never exceeds the MCP scopes the client registered
+      // an OpenID-only request asks for the client's registered MCP scope ceiling
       const scopes = requestedMcpScopes.length
         ? requestedMcpScopes
         : clientMcpScopes.length
@@ -309,6 +309,7 @@ export function createHttp(
       !catalog.readTools.has(request.params?.name ?? "") &&
       !scopes.includes("mcp:write")
     ) {
+      const tool = request.params?.name ? `The ${request.params.name} tool` : "This tool";
       const challenge = `Bearer resource_metadata="${resourceMetadata}", error="insufficient_scope", error_description="Reconnect AltText.ai and allow write access to use this tool", scope="openid mcp:read mcp:write"`;
       const client = await oauth.Client.find(String(token.clientId));
       // ChatGPT ignores an HTTP 403 and only re-links with the scope named in a tool-result challenge
@@ -320,7 +321,7 @@ export function createHttp(
             content: [
               {
                 type: "text",
-                text: "This tool needs write access. Reconnect AltText.ai to allow it.",
+                text: `${tool} needs write access (mcp:write). Reconnect AltText.ai to allow it.`,
               },
             ],
             isError: true,

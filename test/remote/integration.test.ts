@@ -600,10 +600,12 @@ describe("HTTP OAuth and MCP", () => {
     expect(denied.status).toBe(200);
     const reply = (await denied.json()) as {
       id: number;
-      result: { isError: boolean; _meta: Record<string, string[]> };
+      result: { isError: boolean; content: { text: string }[]; _meta: Record<string, string[]> };
     };
     expect(reply.id).toBe(1);
     expect(reply.result.isError).toBe(true);
+    expect(reply.result.content[0]?.text).toContain("mutate");
+    expect(reply.result.content[0]?.text).toContain("mcp:write");
     const challenge = required(reply.result._meta["mcp/www_authenticate"]?.[0]);
     expect(challenge).toContain('error="insufficient_scope"');
     expect(challenge).toContain(

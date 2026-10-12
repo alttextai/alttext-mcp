@@ -51,8 +51,7 @@ export class OAuthStore {
       const record = await this.redis.hGetAll(key(id));
       if (!record["payload"]) return undefined;
       const value = this.decrypt(record["payload"], key(id));
-      // ChatGPT registers some clients read-only, which would reject the write step-up our challenge asks for;
-      // consent still decides what is granted. Other clients keep what they registered
+      // ChatGPT registers some clients read-only, which would reject the write step-up
       if (model === "Client" && isOpenAIClient(value)) {
         const scopes = typeof value.scope === "string" ? value.scope.split(" ") : [];
         value.scope = [...new Set(["openid", "mcp:read", "mcp:write", ...scopes])].join(" ");
@@ -66,7 +65,6 @@ export class OAuthStore {
         const previous = await find(id);
         const tx = this.redis.multi().hSet(key(id), "payload", this.encrypt(payload, key(id)));
         if (ttl !== undefined) tx.expire(key(id), ttl);
-        // records the registration era only; find() no longer gates on it
         if (model === "Client" && !previous) tx.hSet(key(id), "scopes_v", "2");
         for (const field of ["uid", "userCode"] as const) {
           const value = payload[field];
