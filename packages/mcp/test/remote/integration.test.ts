@@ -219,7 +219,12 @@ beforeAll(async () => {
     permissions: new Map([...catalog.permissions, ["whoami", "read"]]),
     create: (key) => {
       const s = catalog.create(key);
-      s.registerTool("whoami", {}, () => ({ content: [{ type: "text", text: key }] }));
+      s.registerTool(
+        "whoami",
+        { _meta: { securitySchemes: [{ type: "oauth2", scopes: ["mcp:read"] }] } },
+        () => ({ content: [{ type: "text", text: key }] }),
+      );
+      s.registerTool("mutate", {}, () => ({ content: [{ type: "text", text: `mutated ${key}` }] }));
       return s;
     },
   });
@@ -286,6 +291,7 @@ async function authorize(
   beforeCallback?: (interactionId: string) => Promise<void>,
   afterRegistration?: (clientId: string) => Promise<void>,
   redirect = { registered: [assistantCallback], requested: assistantCallback },
+  existingClientId?: string,
 ) {
   connections.set(connectionId, scopes);
   const discovery = (await (
@@ -293,7 +299,9 @@ async function authorize(
   ).json()) as { issuer: string; code_challenge_methods_supported: string[] };
   expect(discovery.issuer).toBe(issuer);
   expect(discovery.code_challenge_methods_supported).toEqual(["S256"]);
-  const client = await register(registrationScopes?.join(" "), redirect.registered);
+  const client = existingClientId
+    ? { client_id: existingClientId, scope: "" }
+    : await register(registrationScopes?.join(" "), redirect.registered);
   await afterRegistration?.(client.client_id);
   const verifier = randomBytes(32).toString("base64url");
   const auth = authorizationUrl(
@@ -624,6 +632,104 @@ describe("HTTP OAuth and MCP", () => {
     expect(stepUp.token.id_token).toBeTypeOf("string");
     expect((await toolCall(stepUp.token.access_token)).status).toBe(200);
   });
+  it("lets a ChatGPT client that registered read-only step up to write", async () => {
+    let clientId = "";
+    const readOnly = await authorize(
+      "chatgpt-read-only",
+      ["mcp:read"],
+      ["mcp:read"],
+      ["mcp:read"],
+      undefined,
+      (id) => {
+        clientId = id;
+        return Promise.resolve();
+      },
+      { registered: [chatGptCallback], requested: chatGptCallback },
+    );
+    // ChatGPT only shows its linking UI for a challenge carried in the tool result
+    const denied = await toolCall(readOnly.token.access_token, "mutate");
+    expect(denied.status).toBe(200);
+    const reply = (await denied.json()) as {
+      id: number;
+      result: { isError: boolean; content: { text: string }[]; _meta: Record<string, string[]> };
+    };
+    expect(reply.id).toBe(1);
+    expect(reply.result.isError).toBe(true);
+    expect(reply.result.content[0]?.text).toContain("mutate");
+    expect(reply.result.content[0]?.text).toContain("mcp:write");
+    const challenge = required(reply.result._meta["mcp/www_authenticate"]?.[0]);
+    expect(challenge).toContain('error="insufficient_scope"');
+    expect(challenge).toContain(
+      `resource_metadata="${issuer}/.well-known/oauth-protected-resource/mcp"`,
+    );
+    const hint = required(/scope="([^"]+)"/.exec(challenge)?.[1]);
+    const stepUp = await authorize(
+      "chatgpt-step-up",
+      ["mcp:read", "mcp:write"],
+      hint.split(" "),
+      null,
+      async (id) => {
+        const handoff = await store.get<{ scopes: string[] }>("Handoff", id);
+        expect(handoff?.scopes).toEqual(["mcp:read", "mcp:write"]);
+      },
+      undefined,
+      { registered: [chatGptCallback], requested: chatGptCallback },
+      clientId,
+    );
+    const written = await toolCall(stepUp.token.access_token, "mutate");
+    expect(written.status).toBe(200);
+    const result = (await written.json()) as {
+      result: { isError?: boolean; content: { text: string }[] };
+    };
+    expect(result.result.isError).toBeFalsy();
+    expect(result.result.content[0]?.text).toBe("mutated upstream-key-chatgpt-step-up");
+  });
+  it("publishes each tool's securitySchemes at the top level of tools/list", async () => {
+    const { token } = await authorize("tool-list");
+    const response = await fetch(`${issuer}/mcp`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token.access_token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+    });
+    const { result } = (await response.json()) as {
+      result: {
+        tools: { name: string; securitySchemes?: unknown; _meta?: Record<string, unknown> }[];
+      };
+    };
+    const whoami = result.tools.find((tool) => tool.name === "whoami");
+    expect(whoami?.securitySchemes).toEqual([{ type: "oauth2", scopes: ["mcp:read"] }]);
+    expect(whoami?._meta?.["securitySchemes"]).toEqual(whoami?.securitySchemes);
+    const mutate = result.tools.find((tool) => tool.name === "mutate");
+    expect(mutate).toBeDefined();
+    expect(mutate).not.toHaveProperty("securitySchemes");
+    const called = (await (await toolCall(token.access_token)).json()) as {
+      result: Record<string, unknown>;
+    };
+    expect(called.result).toEqual({ content: [{ type: "text", text: "upstream-key-tool-list" }] });
+  });
+  it("falls back to a 403 challenge when a ChatGPT token's client record is gone", async () => {
+    let clientId = "";
+    const { token } = await authorize(
+      "chatgpt-missing-client",
+      ["mcp:read"],
+      ["mcp:read"],
+      ["mcp:read"],
+      undefined,
+      (id) => {
+        clientId = id;
+        return Promise.resolve();
+      },
+      { registered: [chatGptCallback], requested: chatGptCallback },
+    );
+    expect(await redis.del(`${store.namespace}:Client:${clientId}`)).toBe(1);
+    const denied = await toolCall(token.access_token, "mutate");
+    expect(denied.status).toBe(403);
+    expect(denied.headers.get("www-authenticate")).toContain('error="insufficient_scope"');
+  });
   it("never lets live scopes exceed the consented scopes on an OpenID-only token", async () => {
     const { token } = await authorize("openid-read-only", ["mcp:read"], ["openid"]);
     connections.set("openid-read-only", ["mcp:read", "mcp:write"]);
@@ -703,5 +809,106 @@ describe("HTTP OAuth and MCP", () => {
     expect(await denied.json()).toMatchObject({ required_scope: "mcp:write" });
     const hint = /scope="([^"]+)"/.exec(denied.headers.get("www-authenticate") ?? "")?.[1];
     expect(hint?.split(" ")).toEqual(["openid", "mcp:read", "mcp:write", "mcp:keys"]);
+  });
+  it("lets a ChatGPT client that registered read-only step up to mcp:keys", async () => {
+    let clientId = "";
+    const readOnly = await authorize(
+      "chatgpt-keys-read-only",
+      ["mcp:read"],
+      ["mcp:read"],
+      ["mcp:read"],
+      undefined,
+      (id) => {
+        clientId = id;
+        return Promise.resolve();
+      },
+      { registered: [chatGptCallback], requested: chatGptCallback },
+    );
+    const denied = await toolCall(readOnly.token.access_token, "list_api_keys", { limit: 5 });
+    expect(denied.status).toBe(200);
+    const reply = (await denied.json()) as {
+      id: number;
+      result: { isError: boolean; content: { text: string }[]; _meta: Record<string, string[]> };
+    };
+    expect(reply.id).toBe(1);
+    expect(reply.result.isError).toBe(true);
+    expect(reply.result.content[0]?.text).toContain("list_api_keys");
+    expect(reply.result.content[0]?.text).toContain("mcp:keys");
+    const challenge = required(reply.result._meta["mcp/www_authenticate"]?.[0]);
+    expect(challenge).toContain('error="insufficient_scope"');
+    expect(challenge).toContain(
+      `resource_metadata="${issuer}/.well-known/oauth-protected-resource/mcp"`,
+    );
+    const hint = required(/scope="([^"]+)"/.exec(challenge)?.[1]);
+    expect(hint.split(" ")).toEqual(["openid", "mcp:read", "mcp:keys"]);
+    const stepUp = await authorize(
+      "chatgpt-keys-step-up",
+      ["mcp:read", "mcp:keys"],
+      hint.split(" "),
+      null,
+      async (id) => {
+        const handoff = await store.get<{ scopes: string[] }>("Handoff", id);
+        expect(handoff?.scopes).toEqual(["mcp:read", "mcp:keys"]);
+      },
+      undefined,
+      { registered: [chatGptCallback], requested: chatGptCallback },
+      clientId,
+    );
+    const listed = await toolCall(stepUp.token.access_token, "list_api_keys", { limit: 5 });
+    expect(listed.status).toBe(200);
+    const result = (await listed.json()) as { result: { isError?: boolean } };
+    expect(result.result.isError).toBeFalsy();
+    expect(apiRequests.filter((r) => r.key === "upstream-key-chatgpt-keys-step-up")).toHaveLength(
+      1,
+    );
+  });
+  it("names mcp:keys first when a read-only ChatGPT connection tries to change a key", async () => {
+    const { token } = await authorize(
+      "chatgpt-keys-write-denied",
+      ["mcp:read"],
+      ["mcp:read"],
+      ["mcp:read"],
+      undefined,
+      undefined,
+      { registered: [chatGptCallback], requested: chatGptCallback },
+    );
+    const denied = await toolCall(token.access_token, "rotate_api_key", { id: 1 });
+    expect(denied.status).toBe(200);
+    const reply = (await denied.json()) as {
+      result: { isError: boolean; content: { text: string }[]; _meta: Record<string, string[]> };
+    };
+    expect(reply.result.isError).toBe(true);
+    expect(reply.result.content[0]?.text).toContain("rotate_api_key");
+    expect(reply.result.content[0]?.text).toContain("mcp:keys");
+    const challenge = required(reply.result._meta["mcp/www_authenticate"]?.[0]);
+    const hint = required(/scope="([^"]+)"/.exec(challenge)?.[1]);
+    expect(hint.split(" ")).toEqual(["openid", "mcp:read", "mcp:write", "mcp:keys"]);
+    expect(apiRequests.filter((r) => r.key === "upstream-key-chatgpt-keys-write-denied")).toEqual(
+      [],
+    );
+  });
+  it("tells a non-OpenAI client registered without mcp:keys to re-add the connector", async () => {
+    const registered = ["mcp:read", "mcp:write"];
+    const { token, client } = await authorize(
+      "keys-not-widened",
+      registered,
+      registered,
+      registered,
+    );
+    const denied = await toolCall(token.access_token, "list_api_keys", { limit: 5 });
+    expect(denied.status).toBe(403);
+    const body = (await denied.json()) as Record<string, string>;
+    expect(body).toMatchObject({ error: "insufficient_scope", required_scope: "mcp:keys" });
+    const description = required(body["error_description"]);
+    expect(description).toContain("Remove and re-add the AltText.ai connector");
+    expect(description).toContain("'Manage API keys'");
+    expect(description).toContain("AltText.ai dashboard");
+    expect(description).toContain("alttext CLI with a full-access key");
+    expect(denied.headers.get("www-authenticate")).toContain(description);
+    const verifier = randomBytes(32).toString("base64url");
+    const stepUp = await browser(
+      authorizationUrl(client.client_id, "mcp:read mcp:write mcp:keys", verifier).href,
+    );
+    expect(stepUp.headers.get("location")).toContain("error=invalid_scope");
   });
 });

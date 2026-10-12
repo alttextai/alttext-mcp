@@ -60,7 +60,42 @@ describe("durable OAuth adapter", () => {
     await adapter.upsert("legacy", chatGpt);
     await redis.hDel("test:Client:legacy", "scopes_v");
     await adapter.upsert("legacy", chatGpt);
-    expect(await adapter.find("legacy")).toMatchObject({ scope: "openid mcp:read mcp:write" });
+    expect(await adapter.find("legacy")).toMatchObject({
+      scope: "openid mcp:read mcp:write mcp:keys",
+    });
+  });
+  it("expands a ChatGPT client that registered read-only after scopes_v existed", async () => {
+    const adapter = store.adapter("Client");
+    await adapter.upsert("current", {
+      clientId: "current",
+      scope: "mcp:read",
+      redirect_uris: ["https://chatgpt.com/connector_platform_oauth_redirect"],
+    });
+    expect(await redis.hGet("test:Client:current", "scopes_v")).toBe("2");
+    expect(await adapter.find("current")).toMatchObject({
+      scope: "openid mcp:read mcp:write mcp:keys",
+    });
+  });
+  it("keeps a client with no redirect URIs at its registered scope", async () => {
+    const adapter = store.adapter("Client");
+    await adapter.upsert("no-redirects", {
+      clientId: "no-redirects",
+      scope: "mcp:read",
+      redirect_uris: [],
+    });
+    expect(await adapter.find("no-redirects")).toMatchObject({ scope: "mcp:read" });
+  });
+  it("keeps a client that mixes an OpenAI callback with its own at its registered scope", async () => {
+    const adapter = store.adapter("Client");
+    await adapter.upsert("mixed", {
+      clientId: "mixed",
+      scope: "mcp:read",
+      redirect_uris: [
+        "https://chatgpt.com/connector_platform_oauth_redirect",
+        "https://attacker.example/callback",
+      ],
+    });
+    expect(await adapter.find("mixed")).toMatchObject({ scope: "mcp:read" });
   });
   it("leaves other legacy clients at the scope they registered", async () => {
     const adapter = store.adapter("Client");
@@ -80,7 +115,7 @@ describe("durable OAuth adapter", () => {
     });
     await redis.hDel("test:Client:legacy-platform", "scopes_v");
     expect(await adapter.find("legacy-platform")).toMatchObject({
-      scope: "openid mcp:read mcp:write",
+      scope: "openid mcp:read mcp:write mcp:keys",
     });
   });
 

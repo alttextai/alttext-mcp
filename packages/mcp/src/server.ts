@@ -5,8 +5,13 @@ import {
   availableOperations,
   runOperation,
   VERSION,
+  type Operation,
   type SurfaceOptions,
 } from "@alttext_ai/core";
+
+export interface ServerOptions extends SurfaceOptions {
+  readonly toolMeta?: (operation: Operation) => Record<string, unknown>;
+}
 
 const PROBE_TIMEOUT_MS = 10_000;
 
@@ -22,7 +27,7 @@ function errorContent(err: unknown): { content: { type: "text"; text: string }[]
   return { content: [{ type: "text", text: `Error: ${message}` }], isError: true };
 }
 
-export function createServer(api: AltTextApi, options: SurfaceOptions = {}): McpServer {
+export function createServer(api: AltTextApi, options: ServerOptions = {}): McpServer {
   const server = new McpServer({ name: "alttext-ai", version: VERSION });
 
   for (const operation of availableOperations(options)) {
@@ -34,6 +39,7 @@ export function createServer(api: AltTextApi, options: SurfaceOptions = {}): Mcp
         description: operation.description,
         inputSchema: operation.input,
         outputSchema: operation.output,
+        _meta: options.toolMeta?.(operation),
       },
       async (input) => {
         try {

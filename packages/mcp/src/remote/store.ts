@@ -1,13 +1,14 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import type { RedisClientType } from "redis";
 import type { Adapter, AdapterPayload } from "oidc-provider";
+import { SCOPES } from "./scopes.js";
 
 const OPENAI_HOSTS = ["chatgpt.com", "openai.com"];
 
-function isOpenAIClient(client: AdapterPayload): boolean {
+export function isOpenAIClient(client: AdapterPayload): boolean {
   const uris: unknown = client.redirect_uris;
-  if (!Array.isArray(uris)) return false;
-  return uris.some((value) => {
+  if (!Array.isArray(uris) || !uris.length) return false;
+  return uris.every((value) => {
     if (typeof value !== "string" || !URL.canParse(value)) return false;
     const url = new URL(value);
     return (
@@ -51,10 +52,11 @@ export class OAuthStore {
       const record = await this.redis.hGetAll(key(id));
       if (!record["payload"]) return undefined;
       const value = this.decrypt(record["payload"], key(id));
-      // the cached ChatGPT client predates openid and mcp:write; other legacy clients keep what they registered
-      if (model === "Client" && record["scopes_v"] !== "2" && isOpenAIClient(value)) {
+      // ChatGPT registers some clients read-only, which would reject the write and keys step-ups;
+      // consent in the app still decides what the grant holds
+      if (model === "Client" && isOpenAIClient(value)) {
         const scopes = typeof value.scope === "string" ? value.scope.split(" ") : [];
-        value.scope = [...new Set(["openid", "mcp:read", "mcp:write", ...scopes])].join(" ");
+        value.scope = [...new Set([...SCOPES, ...scopes])].join(" ");
       }
       if (record["consumed"]) value.consumed = Number(record["consumed"]);
       return value;
@@ -65,7 +67,6 @@ export class OAuthStore {
         const previous = await find(id);
         const tx = this.redis.multi().hSet(key(id), "payload", this.encrypt(payload, key(id)));
         if (ttl !== undefined) tx.expire(key(id), ttl);
-        // marking only new records keeps a re-saved legacy client from narrowing to mcp:read
         if (model === "Client" && !previous) tx.hSet(key(id), "scopes_v", "2");
         for (const field of ["uid", "userCode"] as const) {
           const value = payload[field];
