@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { AltTextApi } from "@alttext_ai/core";
+import { AltTextApi, operations } from "@alttext_ai/core";
 import { createServer } from "../src/server.js";
 
 describe("server registration", () => {
@@ -19,5 +19,18 @@ describe("server registration", () => {
       await client.close();
       await server.close();
     }
+  });
+
+  it("gates hosted calls on the same read tools as before", () => {
+    const reads = operations.filter((operation) => operation.permission === "read");
+    expect(reads.map((operation) => operation.name).sort()).toEqual([
+      "get_account",
+      "get_image",
+      "list_images",
+      "search_images",
+    ]);
+    expect(operations.every((operation) => ["read", "write"].includes(operation.permission))).toBe(
+      true,
+    );
   });
 });

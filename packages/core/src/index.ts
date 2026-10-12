@@ -3,3 +3,14 @@ export { formatAccount, formatImage, formatImageList, formatScrapeResult } from 
 export { generationOptionsSchema, scrapeOptionsSchema } from "./schemas.js";
 export type * from "./types.js";
 export { VERSION } from "./version.js";
+export {
+  availableOperations,
+  defineOperation,
+  operationJsonSchemas,
+  operations,
+  runOperation,
+  type Operation,
+  type OperationAnnotations,
+  type OperationResult,
+  type Permission,
+} from "./registry/index.js";

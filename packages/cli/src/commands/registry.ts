@@ -1,0 +1,70 @@
+import {
+  availableOperations,
+  operationJsonSchemas,
+  type Operation,
+  type OperationAnnotations,
+} from "@alttext_ai/core";
+
+/** Commands that exist only on the CLI and map to no registry operation. */
+export const CLI_ONLY_COMMANDS: readonly string[] = ["login", "logout", "whoami"];
+
+export interface CommandFlag {
+  readonly flag: string;
+  readonly property: string;
+  readonly type: string;
+  readonly required: boolean;
+  readonly description: string | undefined;
+  readonly choices: readonly string[] | undefined;
+}
+
+export interface Command {
+  readonly name: string;
+  readonly noun: string;
+  readonly verb: string;
+  readonly operation: string;
+  readonly description: string;
+  readonly annotations: OperationAnnotations;
+  readonly inputSchema: Record<string, unknown>;
+  readonly outputSchema: Record<string, unknown>;
+  readonly flags: readonly CommandFlag[];
+}
+
+interface PropertySchema {
+  type?: string;
+  description?: string;
+  enum?: string[];
+}
+
+function toFlags(inputSchema: Record<string, unknown>): CommandFlag[] {
+  const properties = (inputSchema["properties"] ?? {}) as Record<string, PropertySchema>;
+  const required = new Set((inputSchema["required"] ?? []) as string[]);
+  return Object.entries(properties).map(([property, schema]) => ({
+    flag: `--${property.replaceAll("_", "-")}`,
+    property,
+    type: schema.type ?? "string",
+    required: required.has(property),
+    description: schema.description,
+    choices: schema.enum,
+  }));
+}
+
+function toCommand(operation: Operation): Command {
+  const { input, output } = operationJsonSchemas(operation);
+  const { noun, verb } = operation.command;
+  return {
+    name: `${noun} ${verb}`,
+    noun,
+    verb,
+    operation: operation.name,
+    description: operation.description,
+    annotations: operation.annotations,
+    inputSchema: input,
+    outputSchema: output,
+    flags: toFlags(input),
+  };
+}
+
+/** The CLI command table, one command per registry operation. */
+export function buildCommandTable(options: { localFiles?: boolean } = {}): Command[] {
+  return availableOperations(options).map(toCommand);
+}
