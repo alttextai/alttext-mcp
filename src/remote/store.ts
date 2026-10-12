@@ -6,8 +6,8 @@ const OPENAI_HOSTS = ["chatgpt.com", "openai.com"];
 
 export function isOpenAIClient(client: AdapterPayload): boolean {
   const uris: unknown = client.redirect_uris;
-  if (!Array.isArray(uris)) return false;
-  return uris.some((value) => {
+  if (!Array.isArray(uris) || !uris.length) return false;
+  return uris.every((value) => {
     if (typeof value !== "string" || !URL.canParse(value)) return false;
     const url = new URL(value);
     return (

@@ -72,6 +72,18 @@ describe("durable OAuth adapter", () => {
     expect(await redis.hGet("test:Client:current", "scopes_v")).toBe("2");
     expect(await adapter.find("current")).toMatchObject({ scope: "openid mcp:read mcp:write" });
   });
+  it("keeps a client that mixes an OpenAI callback with its own at its registered scope", async () => {
+    const adapter = store.adapter("Client");
+    await adapter.upsert("mixed", {
+      clientId: "mixed",
+      scope: "mcp:read",
+      redirect_uris: [
+        "https://chatgpt.com/connector_platform_oauth_redirect",
+        "https://attacker.example/callback",
+      ],
+    });
+    expect(await adapter.find("mixed")).toMatchObject({ scope: "mcp:read" });
+  });
   it("leaves other legacy clients at the scope they registered", async () => {
     const adapter = store.adapter("Client");
     for (const [id, redirect] of [

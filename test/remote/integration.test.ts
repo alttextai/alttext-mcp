@@ -180,7 +180,11 @@ beforeAll(async () => {
     readTools: new Set(["whoami"]),
     create: (key) => {
       const s = new McpServer({ name: "test", version: "1" });
-      s.registerTool("whoami", {}, () => ({ content: [{ type: "text", text: key }] }));
+      s.registerTool(
+        "whoami",
+        { _meta: { securitySchemes: [{ type: "oauth2", scopes: ["mcp:read"] }] } },
+        () => ({ content: [{ type: "text", text: key }] }),
+      );
       s.registerTool("mutate", {}, () => ({ content: [{ type: "text", text: `mutated ${key}` }] }));
       return s;
     },
@@ -626,6 +630,26 @@ describe("HTTP OAuth and MCP", () => {
     };
     expect(result.result.isError).toBeFalsy();
     expect(result.result.content[0]?.text).toBe("mutated upstream-key-chatgpt-step-up");
+  });
+  it("publishes each tool's securitySchemes at the top level of tools/list", async () => {
+    const { token } = await authorize("tool-list");
+    const response = await fetch(`${issuer}/mcp`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token.access_token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+    });
+    const { result } = (await response.json()) as {
+      result: {
+        tools: { name: string; securitySchemes?: unknown; _meta?: Record<string, unknown> }[];
+      };
+    };
+    const whoami = result.tools.find((tool) => tool.name === "whoami");
+    expect(whoami?.securitySchemes).toEqual([{ type: "oauth2", scopes: ["mcp:read"] }]);
+    expect(whoami?._meta?.["securitySchemes"]).toEqual(whoami?.securitySchemes);
   });
   it("never lets live scopes exceed the consented scopes on an OpenID-only token", async () => {
     const { token } = await authorize("openid-read-only", ["mcp:read"], ["openid"]);

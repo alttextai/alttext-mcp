@@ -2,6 +2,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type Provider from "oidc-provider";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { isJSONRPCResultResponse, type JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RemoteConfig } from "./config.js";
 import { type Connection, ProductBridge, signHandoff } from "./product-bridge.js";
@@ -17,6 +18,16 @@ const OPENAI_APPS_CHALLENGE = "PlUuJJowjOgZmLFWv_wfh-9vnZDPkIcgxyaP-82wOqw";
 export interface Catalog {
   create: (apiKey: string) => McpServer;
   readTools: Set<string>;
+}
+// ChatGPT reads securitySchemes from the tool descriptor, and the SDK only emits _meta
+function mirrorSecuritySchemes(message: JSONRPCMessage): JSONRPCMessage {
+  if (!isJSONRPCResultResponse(message) || !Array.isArray(message.result["tools"])) return message;
+  const tools = (message.result["tools"] as { _meta?: Record<string, unknown> }[]).map((tool) =>
+    tool._meta?.["securitySchemes"]
+      ? { ...tool, securitySchemes: tool._meta["securitySchemes"] }
+      : tool,
+  );
+  return { ...message, result: { ...message.result, tools } };
 }
 const equal = (a: string, b: string): boolean =>
   a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
@@ -327,6 +338,8 @@ export function createHttp(
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
     });
+    const forward = transport.send.bind(transport);
+    transport.send = (message, options) => forward(mirrorSecuritySchemes(message), options);
     res.on("close", () => {
       void server.close();
     });
