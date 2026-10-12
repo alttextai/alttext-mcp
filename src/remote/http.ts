@@ -2,10 +2,11 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type Provider from "oidc-provider";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { isJSONRPCResultResponse, type JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RemoteConfig } from "./config.js";
 import { type Connection, ProductBridge, signHandoff } from "./product-bridge.js";
-import type { OAuthStore } from "./store.js";
+import { isOpenAIClient, type OAuthStore } from "./store.js";
 
 interface Handoff {
   nonce: string;
@@ -17,6 +18,16 @@ const OPENAI_APPS_CHALLENGE = "PlUuJJowjOgZmLFWv_wfh-9vnZDPkIcgxyaP-82wOqw";
 export interface Catalog {
   create: (apiKey: string) => McpServer;
   readTools: Set<string>;
+}
+// ChatGPT reads securitySchemes from the tool descriptor, and the SDK only emits _meta
+function mirrorSecuritySchemes(message: JSONRPCMessage): JSONRPCMessage {
+  if (!isJSONRPCResultResponse(message) || !Array.isArray(message.result["tools"])) return message;
+  const tools = (message.result["tools"] as { _meta?: Record<string, unknown> }[]).map((tool) =>
+    tool._meta?.["securitySchemes"]
+      ? { ...tool, securitySchemes: tool._meta["securitySchemes"] }
+      : tool,
+  );
+  return { ...message, result: { ...message.result, tools } };
 }
 const equal = (a: string, b: string): boolean =>
   a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
@@ -140,7 +151,7 @@ export function createHttp(
       const clientMcpScopes = (client.scope ?? "")
         .split(" ")
         .filter((scope) => scope.startsWith("mcp:"));
-      // an OpenID-only request never exceeds the MCP scopes the client registered
+      // an OpenID-only request asks for the client's registered MCP scope ceiling
       const scopes = requestedMcpScopes.length
         ? requestedMcpScopes
         : clientMcpScopes.length
@@ -236,11 +247,9 @@ export function createHttp(
   }
 
   async function mcp(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const resourceMetadata = `${config.issuer}/.well-known/oauth-protected-resource/mcp`;
     const deny = (): void => {
-      res.setHeader(
-        "WWW-Authenticate",
-        `Bearer resource_metadata="${config.issuer}/.well-known/oauth-protected-resource/mcp"`,
-      );
+      res.setHeader("WWW-Authenticate", `Bearer resource_metadata="${resourceMetadata}"`);
       send(res, 401, { error: "invalid_token" });
     };
     const match = /^Bearer ([^\s]+)$/i.exec(req.headers.authorization ?? "");
@@ -294,16 +303,34 @@ export function createHttp(
       send(res, 400, { error: "invalid_request" });
       return;
     }
-    const request = body as { method?: string; params?: { name?: string } };
+    const request = body as { id?: unknown; method?: string; params?: { name?: string } };
     if (
       request.method === "tools/call" &&
       !catalog.readTools.has(request.params?.name ?? "") &&
       !scopes.includes("mcp:write")
     ) {
-      res.setHeader(
-        "WWW-Authenticate",
-        'Bearer error="insufficient_scope", scope="openid mcp:read mcp:write"',
-      );
+      const tool = request.params?.name ? `The ${request.params.name} tool` : "This tool";
+      const challenge = `Bearer resource_metadata="${resourceMetadata}", error="insufficient_scope", error_description="Reconnect AltText.ai and allow write access to use this tool", scope="openid mcp:read mcp:write"`;
+      const client = await oauth.Client.find(String(token.clientId));
+      // ChatGPT ignores an HTTP 403 and only re-links with the scope named in a tool-result challenge
+      if (client && isOpenAIClient(client.metadata())) {
+        send(res, 200, {
+          jsonrpc: "2.0",
+          id: request.id ?? null,
+          result: {
+            content: [
+              {
+                type: "text",
+                text: `${tool} needs write access (mcp:write). Reconnect AltText.ai to allow it.`,
+              },
+            ],
+            isError: true,
+            _meta: { "mcp/www_authenticate": [challenge] },
+          },
+        });
+        return;
+      }
+      res.setHeader("WWW-Authenticate", challenge);
       send(res, 403, { error: "insufficient_scope" });
       return;
     }
@@ -312,6 +339,8 @@ export function createHttp(
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
     });
+    const forward = transport.send.bind(transport);
+    transport.send = (message, options) => forward(mirrorSecuritySchemes(message), options);
     res.on("close", () => {
       void server.close();
     });

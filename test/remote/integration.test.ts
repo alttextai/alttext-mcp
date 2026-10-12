@@ -180,7 +180,12 @@ beforeAll(async () => {
     readTools: new Set(["whoami"]),
     create: (key) => {
       const s = new McpServer({ name: "test", version: "1" });
-      s.registerTool("whoami", {}, () => ({ content: [{ type: "text", text: key }] }));
+      s.registerTool(
+        "whoami",
+        { _meta: { securitySchemes: [{ type: "oauth2", scopes: ["mcp:read"] }] } },
+        () => ({ content: [{ type: "text", text: key }] }),
+      );
+      s.registerTool("mutate", {}, () => ({ content: [{ type: "text", text: `mutated ${key}` }] }));
       return s;
     },
   });
@@ -247,6 +252,7 @@ async function authorize(
   beforeCallback?: (interactionId: string) => Promise<void>,
   afterRegistration?: (clientId: string) => Promise<void>,
   redirect = { registered: [assistantCallback], requested: assistantCallback },
+  existingClientId?: string,
 ) {
   connections.set(connectionId, scopes);
   const discovery = (await (
@@ -254,7 +260,9 @@ async function authorize(
   ).json()) as { issuer: string; code_challenge_methods_supported: string[] };
   expect(discovery.issuer).toBe(issuer);
   expect(discovery.code_challenge_methods_supported).toEqual(["S256"]);
-  const client = await register(registrationScopes?.join(" "), redirect.registered);
+  const client = existingClientId
+    ? { client_id: existingClientId, scope: "" }
+    : await register(registrationScopes?.join(" "), redirect.registered);
   await afterRegistration?.(client.client_id);
   const verifier = randomBytes(32).toString("base64url");
   const auth = authorizationUrl(
@@ -572,6 +580,104 @@ describe("HTTP OAuth and MCP", () => {
     );
     expect(stepUp.token.id_token).toBeTypeOf("string");
     expect((await toolCall(stepUp.token.access_token)).status).toBe(200);
+  });
+  it("lets a ChatGPT client that registered read-only step up to write", async () => {
+    let clientId = "";
+    const readOnly = await authorize(
+      "chatgpt-read-only",
+      ["mcp:read"],
+      ["mcp:read"],
+      ["mcp:read"],
+      undefined,
+      (id) => {
+        clientId = id;
+        return Promise.resolve();
+      },
+      { registered: [chatGptCallback], requested: chatGptCallback },
+    );
+    // ChatGPT only shows its linking UI for a challenge carried in the tool result
+    const denied = await toolCall(readOnly.token.access_token, "mutate");
+    expect(denied.status).toBe(200);
+    const reply = (await denied.json()) as {
+      id: number;
+      result: { isError: boolean; content: { text: string }[]; _meta: Record<string, string[]> };
+    };
+    expect(reply.id).toBe(1);
+    expect(reply.result.isError).toBe(true);
+    expect(reply.result.content[0]?.text).toContain("mutate");
+    expect(reply.result.content[0]?.text).toContain("mcp:write");
+    const challenge = required(reply.result._meta["mcp/www_authenticate"]?.[0]);
+    expect(challenge).toContain('error="insufficient_scope"');
+    expect(challenge).toContain(
+      `resource_metadata="${issuer}/.well-known/oauth-protected-resource/mcp"`,
+    );
+    const hint = required(/scope="([^"]+)"/.exec(challenge)?.[1]);
+    const stepUp = await authorize(
+      "chatgpt-step-up",
+      ["mcp:read", "mcp:write"],
+      hint.split(" "),
+      null,
+      async (id) => {
+        const handoff = await store.get<{ scopes: string[] }>("Handoff", id);
+        expect(handoff?.scopes).toEqual(["mcp:read", "mcp:write"]);
+      },
+      undefined,
+      { registered: [chatGptCallback], requested: chatGptCallback },
+      clientId,
+    );
+    const written = await toolCall(stepUp.token.access_token, "mutate");
+    expect(written.status).toBe(200);
+    const result = (await written.json()) as {
+      result: { isError?: boolean; content: { text: string }[] };
+    };
+    expect(result.result.isError).toBeFalsy();
+    expect(result.result.content[0]?.text).toBe("mutated upstream-key-chatgpt-step-up");
+  });
+  it("publishes each tool's securitySchemes at the top level of tools/list", async () => {
+    const { token } = await authorize("tool-list");
+    const response = await fetch(`${issuer}/mcp`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token.access_token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+    });
+    const { result } = (await response.json()) as {
+      result: {
+        tools: { name: string; securitySchemes?: unknown; _meta?: Record<string, unknown> }[];
+      };
+    };
+    const whoami = result.tools.find((tool) => tool.name === "whoami");
+    expect(whoami?.securitySchemes).toEqual([{ type: "oauth2", scopes: ["mcp:read"] }]);
+    expect(whoami?._meta?.["securitySchemes"]).toEqual(whoami?.securitySchemes);
+    const mutate = result.tools.find((tool) => tool.name === "mutate");
+    expect(mutate).toBeDefined();
+    expect(mutate).not.toHaveProperty("securitySchemes");
+    const called = (await (await toolCall(token.access_token)).json()) as {
+      result: Record<string, unknown>;
+    };
+    expect(called.result).toEqual({ content: [{ type: "text", text: "upstream-key-tool-list" }] });
+  });
+  it("falls back to a 403 challenge when a ChatGPT token's client record is gone", async () => {
+    let clientId = "";
+    const { token } = await authorize(
+      "chatgpt-missing-client",
+      ["mcp:read"],
+      ["mcp:read"],
+      ["mcp:read"],
+      undefined,
+      (id) => {
+        clientId = id;
+        return Promise.resolve();
+      },
+      { registered: [chatGptCallback], requested: chatGptCallback },
+    );
+    expect(await redis.del(`${store.namespace}:Client:${clientId}`)).toBe(1);
+    const denied = await toolCall(token.access_token, "mutate");
+    expect(denied.status).toBe(403);
+    expect(denied.headers.get("www-authenticate")).toContain('error="insufficient_scope"');
   });
   it("never lets live scopes exceed the consented scopes on an OpenID-only token", async () => {
     const { token } = await authorize("openid-read-only", ["mcp:read"], ["openid"]);
