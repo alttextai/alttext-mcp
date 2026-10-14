@@ -1,0 +1,24 @@
+{
+  "name": "alttext-ai",
+  "description": "AltText.ai skills for Claude Code",
+  "owner": {
+    "name": "AltText.ai",
+    "url": "https://alttext.ai"
+  },
+  "plugins": [
+    {
+      "name": "alttext",
+      "source": "./",
+      "description": "Drive the alttext CLI: generate alt text, check credits, and create, limit, rotate, revoke and bill per-client API keys",
+      "author": {
+        "name": "AltText.ai",
+        "url": "https://alttext.ai"
+      },
+      "homepage": "https://alttext.ai",
+      "repository": "https://github.com/alttextai/alttext-mcp",
+      "license": "MIT",
+      "keywords": ["alt-text", "accessibility", "api-keys", "cli"],
+      "skills": ["./skills/alttext"]
+    }
+  ]
+}

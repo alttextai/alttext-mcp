@@ -1,0 +1,928 @@
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createServer, request } from "node:http";
+import { spawn, type ChildProcess } from "node:child_process";
+import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
+import { createClient, type RedisClientType } from "redis";
+import { readConfig } from "../../src/remote/config.js";
+import { OAuthStore } from "../../src/remote/store.js";
+import { ProductBridge } from "../../src/remote/product-bridge.js";
+import { createOAuth } from "../../src/remote/oauth.js";
+import { createHttp } from "../../src/remote/http.js";
+import { createCatalog } from "../../src/remote/catalog.js";
+
+function required(value: string | null | undefined): string {
+  if (!value) throw new Error("Missing response field");
+  return value;
+}
+interface TokenReply {
+  access_token: string;
+  id_token?: string;
+  refresh_token: string;
+}
+let redisProcess: ChildProcess;
+let redis: RedisClientType;
+let store: OAuthStore;
+let server: ReturnType<typeof createHttp>;
+let product: ReturnType<typeof createServer>;
+let issuer: string;
+let active = true;
+const connections = new Map<string, string[]>();
+const apiRequests: { method: string; path: string; key: string; body: string }[] = [];
+function apiKeyRow(id: number, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    name: `Client ${String(id)}`,
+    kind: "site",
+    status: "active",
+    token: `atai_upstream${String(id)}secret`,
+    token_hint: "cret",
+    usage_limit: 500,
+    ...overrides,
+  };
+}
+const cookies = new Map<string, { value: string; path: string }>();
+const assistantCallback = "https://assistant.example/callback";
+const vsCodeRedirects = [
+  "https://insiders.vscode.dev/redirect",
+  "https://vscode.dev/redirect",
+  "http://127.0.0.1/",
+  "http://127.0.0.1:33418/",
+];
+const nativeClients: [string, Record<string, unknown>][] = [
+  ["Claude Code", { redirect_uris: ["http://localhost:54212/callback"] }],
+  [
+    "VS Code",
+    {
+      redirect_uris: vsCodeRedirects,
+      client_uri: "https://code.visualstudio.com",
+      application_type: "native",
+    },
+  ],
+  [
+    "Cursor",
+    {
+      redirect_uris: [
+        "cursor://anysphere.cursor-mcp/oauth/callback",
+        "https://www.cursor.com/agents/mcp/oauth/callback",
+        "http://localhost:8787/callback",
+      ],
+    },
+  ],
+  ["Codex", { redirect_uris: ["http://127.0.0.1:61234/callback"] }],
+  ["IPv6 loopback", { redirect_uris: ["http://[::1]:8080/callback"] }],
+];
+async function registerClient(metadata: Record<string, unknown>) {
+  return fetch(`${issuer}/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+      ...metadata,
+    }),
+  });
+}
+const chatGptCallback = "https://chatgpt.com/connector_platform_oauth_redirect";
+async function port() {
+  const s = createServer();
+  await new Promise<void>((resolve) => s.listen(0, "127.0.0.1", resolve));
+  const a = s.address();
+  if (!a || typeof a === "string") throw new Error("No port");
+  await new Promise<void>((resolve) =>
+    s.close(() => {
+      resolve();
+    }),
+  );
+  return a.port;
+}
+async function browser(url: string) {
+  const path = new URL(url).pathname;
+  const response = await fetch(url, {
+    redirect: "manual",
+    headers: {
+      Cookie: [...cookies]
+        .filter(([, v]) => path.startsWith(v.path))
+        .map(([k, v]) => `${k}=${v.value}`)
+        .join("; "),
+    },
+  });
+  for (const line of response.headers.getSetCookie()) {
+    const [pair, ...attributes] = line.split(";");
+    const [name, ...value] = required(pair).split("=");
+    cookies.set(required(name), {
+      value: value.join("="),
+      path:
+        attributes
+          .find((a) => a.trim().toLowerCase().startsWith("path="))
+          ?.trim()
+          .slice(5) ?? "/",
+    });
+  }
+  return response;
+}
+beforeAll(async () => {
+  const redisPort = await port();
+  const nodePort = await port();
+  const productPort = await port();
+  redisProcess = spawn(
+    "redis-server",
+    ["--port", String(redisPort), "--save", "", "--appendonly", "no"],
+    { stdio: "ignore" },
+  );
+  redis = createClient({ url: `redis://127.0.0.1:${redisPort}` });
+  redis.on("error", () => {});
+  await redis.connect();
+  issuer = `http://127.0.0.1:${nodePort}`;
+  const config = readConfig({
+    NODE_ENV: "test",
+    MCP_ISSUER: issuer,
+    MCP_PRODUCT_ORIGIN: `http://127.0.0.1:${productPort}`,
+    MCP_HANDOFF_SECRET: "h".repeat(32),
+    MCP_BRIDGE_SECRET: "b".repeat(32),
+    MCP_COOKIE_SECRET: "c".repeat(32),
+    MCP_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+    MCP_REDIS_NAMESPACE: "integration",
+    MCP_REDIS_URL: `redis://127.0.0.1:${redisPort}`,
+    MCP_JWKS: JSON.stringify({
+      keys: [
+        {
+          ...generateKeyPairSync("ec", { namedCurve: "P-256" }).privateKey.export({
+            format: "jwk",
+          }),
+          use: "sig",
+          alg: "ES256",
+          kid: "test",
+        },
+      ],
+    }),
+  });
+  product = createServer((req, res) => {
+    if (
+      !(req.url ?? "").startsWith("/api/v1/") &&
+      req.headers.authorization !== `Bearer ${"b".repeat(32)}`
+    ) {
+      res.writeHead(401).end();
+      return;
+    }
+    let body = "";
+    req.on("data", (chunk: Buffer) => {
+      body += chunk.toString();
+    });
+    req.on("end", () => {
+      res.setHeader("Content-Type", "application/json");
+      if ((req.url ?? "").startsWith("/api/v1/")) {
+        const path = req.url ?? "";
+        apiRequests.push({
+          method: req.method ?? "",
+          path,
+          key: String(req.headers["x-api-key"]),
+          body,
+        });
+        if (req.method === "PATCH") {
+          res.end(JSON.stringify(apiKeyRow(1, JSON.parse(body) as Record<string, unknown>)));
+        } else {
+          res.end(
+            JSON.stringify({
+              api_keys: [apiKeyRow(1), apiKeyRow(2)],
+              next_cursor: null,
+              has_more: false,
+            }),
+          );
+        }
+        return;
+      }
+      const id =
+        req.method === "POST"
+          ? (JSON.parse(body) as { code: string }).code
+          : ((req.url ?? "").split("/").at(-1) ?? "");
+      res.setHeader("Content-Type", "application/json");
+      res.end(
+        JSON.stringify({
+          active,
+          connection_id: id,
+          account_id: `account-${id}`,
+          user_id: `user-${id}`,
+          scopes: connections.get(id) ?? [],
+          expires_at: new Date(Date.now() + 86400_000).toISOString(),
+          ...(req.method === "POST" ? { api_key: `upstream-key-${id}` } : {}),
+        }),
+      );
+    });
+  });
+  await new Promise<void>((resolve) => product.listen(productPort, "127.0.0.1", resolve));
+  store = new OAuthStore(redis, config.namespace, config.encryptionKey);
+  const bridge = new ProductBridge(config);
+  const oauth = createOAuth(config, store, bridge);
+  const catalog = createCatalog(config.productOrigin);
+  server = createHttp(config, store, bridge, oauth, {
+    permissions: new Map([...catalog.permissions, ["whoami", "read"]]),
+    create: (key) => {
+      const s = catalog.create(key);
+      s.registerTool(
+        "whoami",
+        { _meta: { securitySchemes: [{ type: "oauth2", scopes: ["mcp:read"] }] } },
+        () => ({ content: [{ type: "text", text: key }] }),
+      );
+      s.registerTool("mutate", {}, () => ({ content: [{ type: "text", text: `mutated ${key}` }] }));
+      return s;
+    },
+  });
+  await new Promise<void>((resolve) => server.listen(nodePort, "127.0.0.1", resolve));
+});
+afterAll(async () => {
+  await new Promise<void>((r) =>
+    server.close(() => {
+      r();
+    }),
+  );
+  await new Promise<void>((r) =>
+    product.close(() => {
+      r();
+    }),
+  );
+  await redis.quit();
+  redisProcess.kill();
+});
+
+async function register(scope?: string, redirectUris = [assistantCallback]) {
+  const registration = await fetch(`${issuer}/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      redirect_uris: redirectUris,
+      client_name: "Example",
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+      scope,
+    }),
+  });
+  const client = (await registration.json()) as { client_id: string; scope: string };
+  expect(registration.status, JSON.stringify(client)).toBe(201);
+  return client;
+}
+function authorizationUrl(
+  clientId: string,
+  scope: string,
+  verifier: string,
+  redirectUri = assistantCallback,
+) {
+  const auth = new URL(`${issuer}/authorize`);
+  Object.entries({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope,
+    resource: `${issuer}/mcp`,
+    code_challenge: createHash("sha256").update(verifier).digest("base64url"),
+    code_challenge_method: "S256",
+    state: "host-state",
+  }).forEach(([k, v]) => {
+    auth.searchParams.set(k, v);
+  });
+  return auth;
+}
+async function authorize(
+  connectionId = "grant-one",
+  scopes = ["mcp:read", "mcp:write"],
+  requestedScopes = scopes,
+  registrationScopes: string[] | null = requestedScopes,
+  beforeCallback?: (interactionId: string) => Promise<void>,
+  afterRegistration?: (clientId: string) => Promise<void>,
+  redirect = { registered: [assistantCallback], requested: assistantCallback },
+  existingClientId?: string,
+) {
+  connections.set(connectionId, scopes);
+  const discovery = (await (
+    await fetch(`${issuer}/.well-known/oauth-authorization-server`)
+  ).json()) as { issuer: string; code_challenge_methods_supported: string[] };
+  expect(discovery.issuer).toBe(issuer);
+  expect(discovery.code_challenge_methods_supported).toEqual(["S256"]);
+  const client = existingClientId
+    ? { client_id: existingClientId, scope: "" }
+    : await register(registrationScopes?.join(" "), redirect.registered);
+  await afterRegistration?.(client.client_id);
+  const verifier = randomBytes(32).toString("base64url");
+  const auth = authorizationUrl(
+    client.client_id,
+    requestedScopes.join(" "),
+    verifier,
+    redirect.requested,
+  );
+  const noPkce = new URL(auth);
+  noPkce.searchParams.delete("code_challenge");
+  const denied = await browser(noPkce.href);
+  expect(denied.headers.get("location")).toContain("error=invalid_request");
+  const wrongResource = new URL(auth);
+  wrongResource.searchParams.set("resource", "https://other.example/mcp");
+  expect((await browser(wrongResource.href)).status).toBe(400);
+  const first = await browser(auth.href);
+  expect(first.status).toBe(303);
+  const consent = await browser(new URL(required(first.headers.get("location")), issuer).href);
+  const railsUrl = new URL(required(consent.headers.get("location")));
+  const handoff = JSON.parse(
+    Buffer.from(
+      required(required(railsUrl.searchParams.get("handoff")).split(".")[0]),
+      "base64url",
+    ).toString(),
+  ) as { return_url: string; interaction_id: string; nonce: string; redirect_host: string };
+  expect(handoff.redirect_host).toBe(new URL(redirect.requested).host);
+  await beforeCallback?.(handoff.interaction_id);
+  const callback = new URL(handoff.return_url);
+  Object.entries({
+    code: connectionId,
+    interaction_id: handoff.interaction_id,
+    state: handoff.nonce,
+  }).forEach(([k, v]) => {
+    callback.searchParams.set(k, v);
+  });
+  const resumed = await browser(callback.href);
+  expect(resumed.status).toBe(303);
+  const finished = await browser(new URL(required(resumed.headers.get("location")), issuer).href);
+  expect(finished.status, await finished.clone().text()).toBe(303);
+  const clientUrl = new URL(required(finished.headers.get("location")), issuer);
+  expect(clientUrl.origin).toBe(new URL(redirect.requested).origin);
+  expect(clientUrl.searchParams.get("state")).toBe("host-state");
+  const exchange = async (fields: Record<string, string>) =>
+    fetch(`${issuer}/token`, {
+      method: "POST",
+      body: new URLSearchParams({
+        client_id: client.client_id,
+        resource: `${issuer}/mcp`,
+        ...fields,
+      }),
+    });
+  const tokenResponse = await exchange({
+    grant_type: "authorization_code",
+    code: required(clientUrl.searchParams.get("code")),
+    redirect_uri: redirect.requested,
+    code_verifier: verifier,
+  });
+  const token = (await tokenResponse.json()) as TokenReply;
+  expect(tokenResponse.status, JSON.stringify(token)).toBe(200);
+  expect(token.refresh_token).toBeTypeOf("string");
+  return { token, exchange, client };
+}
+async function rpc(token: string, method: string, params: Record<string, unknown>) {
+  return fetch(`${issuer}/mcp`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+  });
+}
+async function toolCall(token: string, name = "whoami", args: Record<string, unknown> = {}) {
+  if (Object.keys(args).length) return rpc(token, "tools/call", { name, arguments: args });
+  return fetch(`${issuer}/mcp`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name, arguments: {} },
+    }),
+  });
+}
+
+describe("HTTP OAuth and MCP", () => {
+  it("serves the OpenAI plugin domain-verification challenge", async () => {
+    const response = await fetch(`${issuer}/.well-known/openai-apps-challenge`);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/plain");
+    expect(await response.text()).toBe("PlUuJJowjOgZmLFWv_wfh-9vnZDPkIcgxyaP-82wOqw");
+  });
+
+  it("rejects unauthenticated requests and untrusted transport headers", async () => {
+    const response = await fetch(`${issuer}/mcp`, { method: "POST" });
+    expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toContain("oauth-protected-resource/mcp");
+    expect(
+      (await fetch(`${issuer}/mcp`, { headers: { Origin: "https://evil.example" } })).status,
+    ).toBe(403);
+    const hostile = await new Promise<number | undefined>((resolve) => {
+      const req = request(`${issuer}/mcp`, { headers: { Host: "evil.example" } }, (res) => {
+        res.resume();
+        resolve(res.statusCode);
+      });
+      req.end();
+    });
+    expect(hostile).toBe(403);
+    const loadBalancerHealth = await new Promise<number | undefined>((resolve) => {
+      const req = request(`${issuer}/health`, { headers: { Host: "10.0.0.10:3000" } }, (res) => {
+        res.resume();
+        resolve(res.statusCode);
+      });
+      req.end();
+    });
+    expect(loadBalancerHealth).toBe(200);
+  });
+  it("rejects insecure registration and metadata fetch URLs", async () => {
+    for (const metadata of [
+      { redirect_uris: ["http://evil.example/callback"] },
+      { redirect_uris: ["http://127.0.0.1.evil.example/"] },
+      { redirect_uris: ["http://localhost.evil.example/callback"] },
+      { redirect_uris: ["http://user@127.0.0.1:8080/callback"] },
+      { redirect_uris: ["http://127.0.0.1:8080/callback#fragment"] },
+      { redirect_uris: ["vscode://vscode.github-authentication/did-authenticate"] },
+      { redirect_uris: ["cursor://evil.example/oauth/callback"] },
+      { redirect_uris: ["cursor://anysphere.cursor-mcp/oauth/callback#fragment"] },
+      { redirect_uris: [assistantCallback, "myapp://callback"] },
+      { redirect_uris: [assistantCallback], jwks_uri: "http://169.254.169.254/" },
+    ]) {
+      expect((await registerClient(metadata)).status, JSON.stringify(metadata)).toBe(400);
+    }
+  });
+  it.each(nativeClients)("registers the %s redirect set", async (client_name, metadata) => {
+    const response = await registerClient({ client_name, ...metadata });
+    expect(response.status, await response.text()).toBe(201);
+  });
+  it("accepts any loopback port at authorization time", async () => {
+    const scopes = ["mcp:read", "mcp:write"];
+    const { token } = await authorize(
+      "native-loopback",
+      scopes,
+      scopes,
+      scopes,
+      undefined,
+      undefined,
+      {
+        registered: vsCodeRedirects,
+        requested: "http://127.0.0.1:49152/",
+      },
+    );
+    expect((await toolCall(token.access_token)).status).toBe(200);
+  });
+  it("keeps exact matching for HTTPS redirects and loopback paths", async () => {
+    const response = await registerClient({
+      client_name: "VS Code",
+      redirect_uris: vsCodeRedirects,
+    });
+    const client = (await response.json()) as { client_id: string };
+    expect(response.status).toBe(201);
+    for (const redirectUri of [
+      "https://vscode.dev:8443/redirect",
+      "http://127.0.0.1:49152/other",
+      "http://localhost:33418/",
+    ]) {
+      const auth = new URL(`${issuer}/authorize`);
+      Object.entries({
+        client_id: client.client_id,
+        redirect_uri: redirectUri,
+        response_type: "code",
+        scope: "mcp:read",
+        resource: `${issuer}/mcp`,
+        code_challenge: randomBytes(32).toString("base64url"),
+        code_challenge_method: "S256",
+      }).forEach(([k, v]) => {
+        auth.searchParams.set(k, v);
+      });
+      const denied = await browser(auth.href);
+      expect(denied.status, redirectUri).toBe(400);
+      expect(await denied.json()).toEqual({ error: "invalid_redirect_uri" });
+    }
+  });
+  it("keeps concurrent accounts isolated and denies mutations under read scope", async () => {
+    const one = await authorize("tenant-one");
+    const two = await authorize("tenant-two", ["mcp:read"]);
+    const replies = await Promise.all([
+      toolCall(one.token.access_token),
+      toolCall(two.token.access_token),
+    ]);
+    const text = await Promise.all(replies.map((r) => r.text()));
+    expect(text[0]).toContain("upstream-key-tenant-one");
+    expect(text[0]).not.toContain("upstream-key-tenant-two");
+    expect(text[1]).toContain("upstream-key-tenant-two");
+    expect(text[1]).not.toContain("upstream-key-tenant-one");
+    expect((await toolCall(two.token.access_token, "mutate")).status).toBe(403);
+  });
+  it("discovers, authorizes with PKCE, rotates refresh tokens and rejects revoked access", async () => {
+    const { token, exchange } = await authorize();
+    const call = () => toolCall(token.access_token);
+    const result = await call();
+    expect(result.status, await result.clone().text()).toBe(200);
+    expect(
+      ((await result.json()) as { result: { content: { text: string }[] } }).result.content[0]
+        ?.text,
+    ).toBe("upstream-key-grant-one");
+    const refreshed = await exchange({
+      grant_type: "refresh_token",
+      refresh_token: token.refresh_token,
+    });
+    expect(refreshed.status, await refreshed.clone().text()).toBe(200);
+    expect(((await refreshed.json()) as TokenReply).refresh_token).not.toBe(token.refresh_token);
+    active = false;
+    expect((await call()).status).toBe(401);
+    active = true;
+    const replay = await exchange({
+      grant_type: "refresh_token",
+      refresh_token: token.refresh_token,
+    });
+    expect(replay.status).toBe(400);
+  });
+  it("supports OpenID discovery while granting the MCP resource scopes", async () => {
+    const { token } = await authorize("openai-scan", ["mcp:read", "mcp:write"], ["openid"]);
+    expect(token.id_token).toBeTypeOf("string");
+    expect((await toolCall(token.access_token)).status).toBe(200);
+  });
+  it("adds OpenID support to the ChatGPT client registered before it was advertised", async () => {
+    const scopes = ["openid", "mcp:read", "mcp:write"];
+    const { token } = await authorize(
+      "existing-openai-client",
+      ["mcp:read", "mcp:write"],
+      scopes,
+      ["mcp:read"],
+      undefined,
+      async (clientId) => {
+        expect(await redis.hDel(`${store.namespace}:Client:${clientId}`, "scopes_v")).toBe(1);
+      },
+      { registered: [chatGptCallback], requested: chatGptCallback },
+    );
+    expect(token.id_token).toBeTypeOf("string");
+    expect((await toolCall(token.access_token)).status).toBe(200);
+  });
+  it("keeps a legacy non-OpenAI client that registered read-only at read-only", async () => {
+    const client = await register("mcp:read");
+    expect(await redis.hDel(`${store.namespace}:Client:${client.client_id}`, "scopes_v")).toBe(1);
+    const verifier = randomBytes(32).toString("base64url");
+    for (const scope of ["mcp:read mcp:write", "openid mcp:read"]) {
+      const denied = await browser(authorizationUrl(client.client_id, scope, verifier).href);
+      expect(denied.headers.get("location")).toContain("error=invalid_scope");
+    }
+  });
+  it("holds a newly registered read-only client to the scopes it declared", async () => {
+    const client = await register("mcp:read");
+    const verifier = randomBytes(32).toString("base64url");
+    for (const scope of ["mcp:read mcp:write", "openid mcp:read"]) {
+      const denied = await browser(authorizationUrl(client.client_id, scope, verifier).href);
+      expect(denied.headers.get("location")).toContain("error=invalid_scope");
+    }
+  });
+  it("gives a client that registers without a scope every supported scope", async () => {
+    const scopes = ["openid", "mcp:read", "mcp:write"];
+    const { token, client } = await authorize(
+      "scope-less-client",
+      ["mcp:read", "mcp:write"],
+      scopes,
+      null,
+    );
+    expect(client.scope).toBe("openid mcp:read mcp:write mcp:keys");
+    expect(token.id_token).toBeTypeOf("string");
+    expect((await toolCall(token.access_token)).status).toBe(200);
+  });
+  it("caps an OpenID-only request at the MCP scopes the client registered", async () => {
+    const { token } = await authorize(
+      "openid-read-client",
+      ["mcp:read"],
+      ["openid"],
+      ["openid", "mcp:read"],
+      async (id) => {
+        // Rails creates the connection with exactly the scopes the handoff asked for
+        const handoff = await store.get<{ scopes: string[] }>("Handoff", id);
+        expect(handoff?.scopes).toEqual(["mcp:read"]);
+        connections.set("openid-read-client", handoff?.scopes ?? []);
+      },
+    );
+    connections.set("openid-read-client", ["mcp:read", "mcp:write"]);
+    expect((await toolCall(token.access_token)).status).toBe(200);
+    expect((await toolCall(token.access_token, "mutate")).status).toBe(403);
+  });
+  it("lets a client registered from the resource metadata scopes request openid", async () => {
+    const metadata = (await (
+      await fetch(`${issuer}/.well-known/oauth-protected-resource/mcp`)
+    ).json()) as { scopes_supported: string[] };
+    expect(metadata.scopes_supported).toContain("openid");
+    const { token } = await authorize(
+      "metadata-scoped-client",
+      ["mcp:read", "mcp:write"],
+      ["openid"],
+      metadata.scopes_supported,
+    );
+    expect(token.id_token).toBeTypeOf("string");
+    expect((await toolCall(token.access_token)).status).toBe(200);
+  });
+  it("challenges a read-only token with a scope set the client can re-authorize with", async () => {
+    const metadata = (await (
+      await fetch(`${issuer}/.well-known/oauth-protected-resource/mcp`)
+    ).json()) as { scopes_supported: string[] };
+    const readOnly = await authorize(
+      "step-up-read",
+      ["mcp:read"],
+      ["mcp:read"],
+      metadata.scopes_supported,
+    );
+    const denied = await toolCall(readOnly.token.access_token, "mutate");
+    expect(denied.status).toBe(403);
+    const hint = /scope="([^"]+)"/.exec(denied.headers.get("www-authenticate") ?? "")?.[1];
+    expect(hint?.split(" ")).toContain("openid");
+    const stepUp = await authorize(
+      "step-up-write",
+      ["mcp:read", "mcp:write"],
+      required(hint).split(" "),
+      metadata.scopes_supported,
+    );
+    expect(stepUp.token.id_token).toBeTypeOf("string");
+    expect((await toolCall(stepUp.token.access_token)).status).toBe(200);
+  });
+  it("lets a ChatGPT client that registered read-only step up to write", async () => {
+    let clientId = "";
+    const readOnly = await authorize(
+      "chatgpt-read-only",
+      ["mcp:read"],
+      ["mcp:read"],
+      ["mcp:read"],
+      undefined,
+      (id) => {
+        clientId = id;
+        return Promise.resolve();
+      },
+      { registered: [chatGptCallback], requested: chatGptCallback },
+    );
+    // ChatGPT only shows its linking UI for a challenge carried in the tool result
+    const denied = await toolCall(readOnly.token.access_token, "mutate");
+    expect(denied.status).toBe(200);
+    const reply = (await denied.json()) as {
+      id: number;
+      result: { isError: boolean; content: { text: string }[]; _meta: Record<string, string[]> };
+    };
+    expect(reply.id).toBe(1);
+    expect(reply.result.isError).toBe(true);
+    expect(reply.result.content[0]?.text).toContain("mutate");
+    expect(reply.result.content[0]?.text).toContain("mcp:write");
+    const challenge = required(reply.result._meta["mcp/www_authenticate"]?.[0]);
+    expect(challenge).toContain('error="insufficient_scope"');
+    expect(challenge).toContain(
+      `resource_metadata="${issuer}/.well-known/oauth-protected-resource/mcp"`,
+    );
+    const hint = required(/scope="([^"]+)"/.exec(challenge)?.[1]);
+    const stepUp = await authorize(
+      "chatgpt-step-up",
+      ["mcp:read", "mcp:write"],
+      hint.split(" "),
+      null,
+      async (id) => {
+        const handoff = await store.get<{ scopes: string[] }>("Handoff", id);
+        expect(handoff?.scopes).toEqual(["mcp:read", "mcp:write"]);
+      },
+      undefined,
+      { registered: [chatGptCallback], requested: chatGptCallback },
+      clientId,
+    );
+    const written = await toolCall(stepUp.token.access_token, "mutate");
+    expect(written.status).toBe(200);
+    const result = (await written.json()) as {
+      result: { isError?: boolean; content: { text: string }[] };
+    };
+    expect(result.result.isError).toBeFalsy();
+    expect(result.result.content[0]?.text).toBe("mutated upstream-key-chatgpt-step-up");
+  });
+  it("publishes each tool's securitySchemes at the top level of tools/list", async () => {
+    const { token } = await authorize("tool-list");
+    const response = await fetch(`${issuer}/mcp`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token.access_token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+    });
+    const { result } = (await response.json()) as {
+      result: {
+        tools: { name: string; securitySchemes?: unknown; _meta?: Record<string, unknown> }[];
+      };
+    };
+    const whoami = result.tools.find((tool) => tool.name === "whoami");
+    expect(whoami?.securitySchemes).toEqual([{ type: "oauth2", scopes: ["mcp:read"] }]);
+    expect(whoami?._meta?.["securitySchemes"]).toEqual(whoami?.securitySchemes);
+    const mutate = result.tools.find((tool) => tool.name === "mutate");
+    expect(mutate).toBeDefined();
+    expect(mutate).not.toHaveProperty("securitySchemes");
+    const called = (await (await toolCall(token.access_token)).json()) as {
+      result: Record<string, unknown>;
+    };
+    expect(called.result).toEqual({ content: [{ type: "text", text: "upstream-key-tool-list" }] });
+  });
+  it("falls back to a 403 challenge when a ChatGPT token's client record is gone", async () => {
+    let clientId = "";
+    const { token } = await authorize(
+      "chatgpt-missing-client",
+      ["mcp:read"],
+      ["mcp:read"],
+      ["mcp:read"],
+      undefined,
+      (id) => {
+        clientId = id;
+        return Promise.resolve();
+      },
+      { registered: [chatGptCallback], requested: chatGptCallback },
+    );
+    expect(await redis.del(`${store.namespace}:Client:${clientId}`)).toBe(1);
+    const denied = await toolCall(token.access_token, "mutate");
+    expect(denied.status).toBe(403);
+    expect(denied.headers.get("www-authenticate")).toContain('error="insufficient_scope"');
+  });
+  it("never lets live scopes exceed the consented scopes on an OpenID-only token", async () => {
+    const { token } = await authorize("openid-read-only", ["mcp:read"], ["openid"]);
+    connections.set("openid-read-only", ["mcp:read", "mcp:write"]);
+    expect((await toolCall(token.access_token)).status).toBe(200);
+    expect((await toolCall(token.access_token, "mutate")).status).toBe(403);
+  });
+  it("completes consent for handoffs written before oidcScopes existed", async () => {
+    const { token } = await authorize(
+      "legacy-handoff",
+      ["mcp:read", "mcp:write"],
+      ["mcp:read", "mcp:write"],
+      ["mcp:read", "mcp:write"],
+      async (id) => {
+        const handoff = await store.get<{ nonce: string; scopes: string[] }>("Handoff", id);
+        if (!handoff) throw new Error("Missing handoff");
+        await store.put("Handoff", id, { nonce: handoff.nonce, scopes: handoff.scopes }, 300);
+      },
+    );
+    expect((await toolCall(token.access_token)).status).toBe(200);
+  });
+  it("lists key tools for a connection without mcp:keys and refuses their calls naming it", async () => {
+    const { token } = await authorize("keys-missing");
+    const listed = (await (await rpc(token.access_token, "tools/list", {})).json()) as {
+      result: { tools: { name: string }[] };
+    };
+    const names = listed.result.tools.map((tool) => tool.name);
+    expect(names).toEqual(expect.arrayContaining(["list_api_keys", "update_api_key"]));
+    const denied = await toolCall(token.access_token, "list_api_keys");
+    expect(denied.status).toBe(403);
+    const hint = /scope="([^"]+)"/.exec(denied.headers.get("www-authenticate") ?? "")?.[1];
+    expect(hint?.split(" ")).toEqual(["openid", "mcp:read", "mcp:write", "mcp:keys"]);
+    const body = (await denied.json()) as Record<string, string>;
+    expect(body).toMatchObject({ error: "insufficient_scope", required_scope: "mcp:keys" });
+    expect(body["error_description"]).toContain("Manage API keys");
+    expect(apiRequests.filter((r) => r.key === "upstream-key-keys-missing")).toEqual([]);
+  });
+  it("lets a metadata-registered client step up to mcp:keys, then list and update keys", async () => {
+    const metadata = (await (
+      await fetch(`${issuer}/.well-known/oauth-protected-resource/mcp`)
+    ).json()) as { scopes_supported: string[] };
+    expect(metadata.scopes_supported).toContain("mcp:keys");
+    const scopes = ["mcp:read", "mcp:write", "mcp:keys"];
+    const { token } = await authorize(
+      "keys-granted",
+      scopes,
+      ["openid", ...scopes],
+      metadata.scopes_supported,
+    );
+    const listed = await toolCall(token.access_token, "list_api_keys", { limit: 25 });
+    const listText = await listed.text();
+    expect(listed.status, listText).toBe(200);
+    expect(listText).toContain("Client 2");
+    expect(listText).not.toContain("atai_");
+    const updated = await toolCall(token.access_token, "update_api_key", {
+      id: 1,
+      usage_limit: null,
+    });
+    const reply = (await updated.json()) as {
+      result: { isError?: boolean; structuredContent: Record<string, unknown> };
+    };
+    expect(reply.result.isError).toBeFalsy();
+    expect(reply.result.structuredContent).toMatchObject({ id: 1, usage_limit: null });
+    expect(JSON.stringify(reply)).not.toContain("atai_");
+    const calls = apiRequests.filter((r) => r.key === "upstream-key-keys-granted");
+    expect(calls.map((r) => `${r.method} ${r.path}`)).toEqual([
+      "GET /api/v1/api_keys?limit=25",
+      "PATCH /api/v1/api_keys/1",
+    ]);
+    expect(JSON.parse(required(calls[1]?.body))).toEqual({ usage_limit: null });
+  });
+  it("requires mcp:write as well as mcp:keys to change keys", async () => {
+    const scopes = ["mcp:read", "mcp:keys"];
+    const { token } = await authorize("keys-read-only", scopes);
+    expect((await toolCall(token.access_token, "list_api_keys", { limit: 5 })).status).toBe(200);
+    const denied = await toolCall(token.access_token, "rotate_api_key", { id: 1 });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({ required_scope: "mcp:write" });
+    const hint = /scope="([^"]+)"/.exec(denied.headers.get("www-authenticate") ?? "")?.[1];
+    expect(hint?.split(" ")).toEqual(["openid", "mcp:read", "mcp:write", "mcp:keys"]);
+  });
+  it("requires mcp:write as well as mcp:keys to reveal a key's token", async () => {
+    const { token } = await authorize("keys-read-only-reveal", ["mcp:read", "mcp:keys"]);
+    const denied = await toolCall(token.access_token, "reveal_api_key_token", { id: 1 });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({
+      error: "insufficient_scope",
+      required_scope: "mcp:write",
+    });
+    expect(
+      apiRequests.filter(
+        (r) => r.key === "upstream-key-keys-read-only-reveal" && r.path.includes("reveal"),
+      ),
+    ).toHaveLength(0);
+  });
+  it("lets a ChatGPT client that registered read-only step up to mcp:keys", async () => {
+    let clientId = "";
+    const readOnly = await authorize(
+      "chatgpt-keys-read-only",
+      ["mcp:read"],
+      ["mcp:read"],
+      ["mcp:read"],
+      undefined,
+      (id) => {
+        clientId = id;
+        return Promise.resolve();
+      },
+      { registered: [chatGptCallback], requested: chatGptCallback },
+    );
+    const denied = await toolCall(readOnly.token.access_token, "list_api_keys", { limit: 5 });
+    expect(denied.status).toBe(200);
+    const reply = (await denied.json()) as {
+      id: number;
+      result: { isError: boolean; content: { text: string }[]; _meta: Record<string, string[]> };
+    };
+    expect(reply.id).toBe(1);
+    expect(reply.result.isError).toBe(true);
+    expect(reply.result.content[0]?.text).toContain("list_api_keys");
+    expect(reply.result.content[0]?.text).toContain("mcp:keys");
+    const challenge = required(reply.result._meta["mcp/www_authenticate"]?.[0]);
+    expect(challenge).toContain('error="insufficient_scope"');
+    expect(challenge).toContain(
+      `resource_metadata="${issuer}/.well-known/oauth-protected-resource/mcp"`,
+    );
+    const hint = required(/scope="([^"]+)"/.exec(challenge)?.[1]);
+    expect(hint.split(" ")).toEqual(["openid", "mcp:read", "mcp:keys"]);
+    const stepUp = await authorize(
+      "chatgpt-keys-step-up",
+      ["mcp:read", "mcp:keys"],
+      hint.split(" "),
+      null,
+      async (id) => {
+        const handoff = await store.get<{ scopes: string[] }>("Handoff", id);
+        expect(handoff?.scopes).toEqual(["mcp:read", "mcp:keys"]);
+      },
+      undefined,
+      { registered: [chatGptCallback], requested: chatGptCallback },
+      clientId,
+    );
+    const listed = await toolCall(stepUp.token.access_token, "list_api_keys", { limit: 5 });
+    expect(listed.status).toBe(200);
+    const result = (await listed.json()) as { result: { isError?: boolean } };
+    expect(result.result.isError).toBeFalsy();
+    expect(apiRequests.filter((r) => r.key === "upstream-key-chatgpt-keys-step-up")).toHaveLength(
+      1,
+    );
+  });
+  it("names mcp:keys first when a read-only ChatGPT connection tries to change a key", async () => {
+    const { token } = await authorize(
+      "chatgpt-keys-write-denied",
+      ["mcp:read"],
+      ["mcp:read"],
+      ["mcp:read"],
+      undefined,
+      undefined,
+      { registered: [chatGptCallback], requested: chatGptCallback },
+    );
+    const denied = await toolCall(token.access_token, "rotate_api_key", { id: 1 });
+    expect(denied.status).toBe(200);
+    const reply = (await denied.json()) as {
+      result: { isError: boolean; content: { text: string }[]; _meta: Record<string, string[]> };
+    };
+    expect(reply.result.isError).toBe(true);
+    expect(reply.result.content[0]?.text).toContain("rotate_api_key");
+    expect(reply.result.content[0]?.text).toContain("mcp:keys");
+    const challenge = required(reply.result._meta["mcp/www_authenticate"]?.[0]);
+    const hint = required(/scope="([^"]+)"/.exec(challenge)?.[1]);
+    expect(hint.split(" ")).toEqual(["openid", "mcp:read", "mcp:write", "mcp:keys"]);
+    expect(apiRequests.filter((r) => r.key === "upstream-key-chatgpt-keys-write-denied")).toEqual(
+      [],
+    );
+  });
+  it("tells a non-OpenAI client registered without mcp:keys to re-add the connector", async () => {
+    const registered = ["mcp:read", "mcp:write"];
+    const { token, client } = await authorize(
+      "keys-not-widened",
+      registered,
+      registered,
+      registered,
+    );
+    const denied = await toolCall(token.access_token, "list_api_keys", { limit: 5 });
+    expect(denied.status).toBe(403);
+    const body = (await denied.json()) as Record<string, string>;
+    expect(body).toMatchObject({ error: "insufficient_scope", required_scope: "mcp:keys" });
+    const description = required(body["error_description"]);
+    expect(description).toContain("Remove and re-add the AltText.ai connector");
+    expect(description).toContain("'Manage API keys'");
+    expect(description).toContain("AltText.ai dashboard");
+    expect(description).toContain("alttext CLI with a full-access key");
+    expect(denied.headers.get("www-authenticate")).toContain(description);
+    const verifier = randomBytes(32).toString("base64url");
+    const stepUp = await browser(
+      authorizationUrl(client.client_id, "mcp:read mcp:write mcp:keys", verifier).href,
+    );
+    expect(stepUp.headers.get("location")).toContain("error=invalid_scope");
+  });
+});

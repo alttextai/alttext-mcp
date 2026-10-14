@@ -1,0 +1,700 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`help > account --help matches its snapshot 1`] = `
+"Usage: alttext account [options] [command]
+
+View and update your account
+
+Options:
+  -h, --help        Show help
+
+Global Options:
+  -v, --version     Print the version
+  --json            Print the result as JSON on stdout
+  --no-input        Never prompt; fail instead when input is needed
+  --yes             Run destructive commands without asking for confirmation
+  --dry-run         Read the target and show what a change would do, without making it
+  --show-tokens     Show full tokens in keys list and keys get
+
+Commands:
+  get               Get your AltText.ai account info including credit balance, usage, and settings
+  update [options]  Update your AltText.ai account settings (name, webhook URL, notification email)
+"
+`;
+
+exports[`help > account get --help matches its snapshot 1`] = `
+"Usage: alttext account get [options]
+
+Get your AltText.ai account info including credit balance, usage, and settings
+
+Options:
+  -h, --help     Show help
+
+Global Options:
+  -v, --version  Print the version
+  --json         Print the result as JSON on stdout
+  --no-input     Never prompt; fail instead when input is needed
+  --yes          Run destructive commands without asking for confirmation
+  --dry-run      Read the target and show what a change would do, without making it
+  --show-tokens  Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > account update --help matches its snapshot 1`] = `
+"Usage: alttext account update [options]
+
+Update your AltText.ai account settings (name, webhook URL, notification email)
+
+Options:
+  --name <value>                Account name
+  --webhook-url <value>         Webhook URL for processing notifications
+  --notification-email <value>  Email address for notifications
+  -h, --help                    Show help
+
+Global Options:
+  -v, --version                 Print the version
+  --json                        Print the result as JSON on stdout
+  --no-input                    Never prompt; fail instead when input is needed
+  --yes                         Run destructive commands without asking for confirmation
+  --dry-run                     Read the target and show what a change would do, without making it
+  --show-tokens                 Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > alttext --help matches its snapshot 1`] = `
+"Usage: alttext [options] [command]
+
+Command-line tool for AltText.ai
+
+Options:
+  -v, --version  Print the version
+  --json         Print the result as JSON on stdout
+  --no-input     Never prompt; fail instead when input is needed
+  --yes          Run destructive commands without asking for confirmation
+  --dry-run      Read the target and show what a change would do, without making it
+  --show-tokens  Show full tokens in keys list and keys get
+  -h, --help     Show help
+
+Commands:
+  login          Store an API key after checking it works. Reads the key from a hidden prompt, or
+                 from stdin when piped
+  logout         Remove the stored API key from the OS keychain and the credentials file
+  whoami         Show the account, the key's kind, what it can do and where it came from
+  account        View and update your account
+  images         Generate, find and manage alt text for images
+  pages          Find a web page's images and queue alt text for them
+  keys           Create, rotate, revoke and inspect the account's site API keys
+"
+`;
+
+exports[`help > images --help matches its snapshot 1`] = `
+"Usage: alttext images [options] [command]
+
+Generate, find and manage alt text for images
+
+Options:
+  -h, --help                      Show help
+
+Global Options:
+  -v, --version                   Print the version
+  --json                          Print the result as JSON on stdout
+  --no-input                      Never prompt; fail instead when input is needed
+  --yes                           Run destructive commands without asking for confirmation
+  --dry-run                       Read the target and show what a change would do, without making it
+  --show-tokens                   Show full tokens in keys list and keys get
+
+Commands:
+  generate [options]              Generate AI-powered alt text for an image URL. Returns the result
+                                  synchronously (may take a few seconds). Uses account credits;
+                                  additional languages and image conversion can increase the total.
+                                  Can overwrite existing alt text when requested.
+  generate-from-file [options]    Generate alt text from a local image file. Reads a file on the MCP
+                                  server machine and uploads it to AltText.ai. Uses account credits;
+                                  additional languages and image conversion can increase the total.
+                                  Can overwrite existing alt text when requested.
+  translate [options] <asset-id>  Add alt text in a new language for an existing image. Uses the
+                                  asset_id to find the image and generates a translation. Uses
+                                  account credits for each newly generated language.
+  list [options]                  List images in your AltText.ai library with pagination
+  search [options]                Search images by alt text content
+  get [options] <asset-id>        Get details for a specific image by its asset ID
+  update [options] <asset-id>     Update alt text and/or metadata for an existing image
+  delete <asset-id>               Delete an image from your AltText.ai library
+  bulk-create [options]           Upload a local CSV file from the MCP server machine and queue
+                                  asynchronous alt-text generation using account credits. The
+                                  response does not confirm generation completion. CSV should have
+                                  columns: url (required), asset_id, lang, keywords, tags, metadata
+                                  (optional).
+"
+`;
+
+exports[`help > images bulk-create --help matches its snapshot 1`] = `
+"Usage: alttext images bulk-create [options]
+
+Upload a local CSV file from the MCP server machine and queue asynchronous alt-text generation using
+account credits. The response does not confirm generation completion. CSV should have columns: url
+(required), asset_id, lang, keywords, tags, metadata (optional).
+
+Options:
+  --csv-file <value>  Path to CSV file with image URLs and optional metadata
+  --email <value>     Email for completion notification
+  -h, --help          Show help
+
+Global Options:
+  -v, --version       Print the version
+  --json              Print the result as JSON on stdout
+  --no-input          Never prompt; fail instead when input is needed
+  --yes               Run destructive commands without asking for confirmation
+  --dry-run           Read the target and show what a change would do, without making it
+  --show-tokens       Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > images delete --help matches its snapshot 1`] = `
+"Usage: alttext images delete [options] <asset-id>
+
+Delete an image from your AltText.ai library
+
+Arguments:
+  asset-id       The asset ID of the image to delete
+
+Options:
+  -h, --help     Show help
+
+Global Options:
+  -v, --version  Print the version
+  --json         Print the result as JSON on stdout
+  --no-input     Never prompt; fail instead when input is needed
+  --yes          Run destructive commands without asking for confirmation
+  --dry-run      Read the target and show what a change would do, without making it
+  --show-tokens  Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > images generate --help matches its snapshot 1`] = `
+"Usage: alttext images generate [options]
+
+Generate AI-powered alt text for an image URL. Returns the result synchronously (may take a few
+seconds). Uses account credits; additional languages and image conversion can increase the total.
+Can overwrite existing alt text when requested.
+
+Options:
+  --url <value>                Public URL of the image
+  --asset-id <value>           Custom asset ID (default: auto-generated hash)
+  --lang <value>               Comma-separated language codes (e.g. 'en', 'en,fr,es')
+  --keywords <value>           Keywords to incorporate (repeatable)
+  --negative-keywords <value>  Keywords to avoid (repeatable)
+  --gpt-prompt <value>         Custom prompt template. Use {{AltText}} as a placeholder for the
+                               generated alt text.
+  --max-chars <n>              Maximum character length for the alt text
+  --overwrite                  Overwrite existing alt text if image was previously processed
+  --no-overwrite               Set overwrite to false
+  --tags <value>               Tags for organization (repeatable)
+  --metadata <key=value>       Custom metadata (string key-value pairs) (repeatable)
+  -h, --help                   Show help
+
+Global Options:
+  -v, --version                Print the version
+  --json                       Print the result as JSON on stdout
+  --no-input                   Never prompt; fail instead when input is needed
+  --yes                        Run destructive commands without asking for confirmation
+  --dry-run                    Read the target and show what a change would do, without making it
+  --show-tokens                Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > images generate-from-file --help matches its snapshot 1`] = `
+"Usage: alttext images generate-from-file [options]
+
+Generate alt text from a local image file. Reads a file on the MCP server machine and uploads it to
+AltText.ai. Uses account credits; additional languages and image conversion can increase the total.
+Can overwrite existing alt text when requested.
+
+Options:
+  --file-path <value>          Absolute path to a local image file
+  --asset-id <value>           Custom asset ID (default: auto-generated hash)
+  --lang <value>               Comma-separated language codes (e.g. 'en', 'en,fr,es')
+  --keywords <value>           Keywords to incorporate (repeatable)
+  --negative-keywords <value>  Keywords to avoid (repeatable)
+  --gpt-prompt <value>         Custom prompt template. Use {{AltText}} as a placeholder for the
+                               generated alt text.
+  --max-chars <n>              Maximum character length for the alt text
+  --overwrite                  Overwrite existing alt text if image was previously processed
+  --no-overwrite               Set overwrite to false
+  --tags <value>               Tags for organization (repeatable)
+  --metadata <key=value>       Custom metadata (string key-value pairs) (repeatable)
+  -h, --help                   Show help
+
+Global Options:
+  -v, --version                Print the version
+  --json                       Print the result as JSON on stdout
+  --no-input                   Never prompt; fail instead when input is needed
+  --yes                        Run destructive commands without asking for confirmation
+  --dry-run                    Read the target and show what a change would do, without making it
+  --show-tokens                Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > images get --help matches its snapshot 1`] = `
+"Usage: alttext images get [options] <asset-id>
+
+Get details for a specific image by its asset ID
+
+Arguments:
+  asset-id        The asset ID of the image
+
+Options:
+  --lang <value>  Filter alt texts by language code
+  -h, --help      Show help
+
+Global Options:
+  -v, --version   Print the version
+  --json          Print the result as JSON on stdout
+  --no-input      Never prompt; fail instead when input is needed
+  --yes           Run destructive commands without asking for confirmation
+  --dry-run       Read the target and show what a change would do, without making it
+  --show-tokens   Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > images list --help matches its snapshot 1`] = `
+"Usage: alttext images list [options]
+
+List images in your AltText.ai library with pagination
+
+Options:
+  --page <n>           Page number (default: 1)
+  --limit <n>          Items per page (default: 20, max: 100)
+  --lang <value>       Filter alt texts by language code
+  --url <value>        Filter images by exact URL match
+  --sort <value>       Sort column (default: id) (choices: "id", "created_at", "asset_id")
+  --direction <value>  Sort direction (default: DESC) (choices: "ASC", "DESC")
+  -h, --help           Show help
+
+Global Options:
+  -v, --version        Print the version
+  --json               Print the result as JSON on stdout
+  --no-input           Never prompt; fail instead when input is needed
+  --yes                Run destructive commands without asking for confirmation
+  --dry-run            Read the target and show what a change would do, without making it
+  --show-tokens        Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > images search --help matches its snapshot 1`] = `
+"Usage: alttext images search [options]
+
+Search images by alt text content
+
+Options:
+  --query <value>  Search query to match against alt text
+  --limit <n>      Max results to return (default: 20)
+  --lang <value>   Filter by language code
+  -h, --help       Show help
+
+Global Options:
+  -v, --version    Print the version
+  --json           Print the result as JSON on stdout
+  --no-input       Never prompt; fail instead when input is needed
+  --yes            Run destructive commands without asking for confirmation
+  --dry-run        Read the target and show what a change would do, without making it
+  --show-tokens    Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > images translate --help matches its snapshot 1`] = `
+"Usage: alttext images translate [options] <asset-id>
+
+Add alt text in a new language for an existing image. Uses the asset_id to find the image and
+generates a translation. Uses account credits for each newly generated language.
+
+Arguments:
+  asset-id        The asset ID of the existing image to translate
+
+Options:
+  --lang <value>  Target language code(s), comma-separated (e.g. 'de', 'fr,es')
+  -h, --help      Show help
+
+Global Options:
+  -v, --version   Print the version
+  --json          Print the result as JSON on stdout
+  --no-input      Never prompt; fail instead when input is needed
+  --yes           Run destructive commands without asking for confirmation
+  --dry-run       Read the target and show what a change would do, without making it
+  --show-tokens   Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > images update --help matches its snapshot 1`] = `
+"Usage: alttext images update [options] <asset-id>
+
+Update alt text and/or metadata for an existing image
+
+Arguments:
+  asset-id                The asset ID of the image to update
+
+Options:
+  --alt-text <value>      New alt text value
+  --tags <value>          Replace tags (repeatable)
+  --metadata <key=value>  Replace metadata (string key-value pairs) (repeatable)
+  --lang <value>          Language code for the alt text (default: 'en')
+  --overwrite             If false, skip language entries that already exist
+  --no-overwrite          Set overwrite to false
+  -h, --help              Show help
+
+Global Options:
+  -v, --version           Print the version
+  --json                  Print the result as JSON on stdout
+  --no-input              Never prompt; fail instead when input is needed
+  --yes                   Run destructive commands without asking for confirmation
+  --dry-run               Read the target and show what a change would do, without making it
+  --show-tokens           Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > keys --help matches its snapshot 1`] = `
+"Usage: alttext keys [options] [command]
+
+Create, rotate, revoke and inspect the account's site API keys
+
+Options:
+  -h, --help              Show help
+
+Global Options:
+  -v, --version           Print the version
+  --json                  Print the result as JSON on stdout
+  --no-input              Never prompt; fail instead when input is needed
+  --yes                   Run destructive commands without asking for confirmation
+  --dry-run               Read the target and show what a change would do, without making it
+  --show-tokens           Show full tokens in keys list and keys get
+
+Commands:
+  list [options]          List the account's site API keys with usage and limits. Tokens are masked
+                          to their last four characters. billable_credits is uncapped;
+                          billable_complete false means the figure may undercount. previous_period
+                          is the latest closure, which may be a revocation rather than last month.
+                          For historical billing use detail full, match credit_history
+                          period_start/period_end to the requested interval, and verify
+                          completeness. status "all" includes revoked keys
+  get [options] <id>      Get one API key's details, usage and limit. The token is masked; use
+                          reveal_api_key_token to see it. billable_credits is uncapped;
+                          billable_complete false means the figure may undercount. previous_period
+                          is the latest closure, which may be a revocation rather than last month.
+                          For historical billing use detail full, match credit_history
+                          period_start/period_end to the requested interval, and verify completeness
+  reveal <id>             Show one API key's full token. The reveal is recorded in the key's
+                          history. Only use when the person asks for this key's token
+  create [options]        Create a site API key, optionally with a per-period credit limit. Returns
+                          the new token
+  update [options] <id>   Rename an API key or change its per-period credit limit (null removes the
+                          limit)
+  rotate [options] <id>   Replace an API key's token. The old token stops working immediately.
+                          Returns the new token. First confirm the key by name and id with the
+                          person, and check get_api_key's integration field: an integration key
+                          stops working until it reconnects
+  revoke <id>             Revoke an API key. Its token stops working immediately; the key and its
+                          usage stay readable. First confirm the key by name and id with the person,
+                          and check get_api_key's integration field: an integration key stops
+                          working until it reconnects
+  history [options] <id>  List the recorded changes to one API key, newest first, with who made each
+"
+`;
+
+exports[`help > keys create --help matches its snapshot 1`] = `
+"Usage: alttext keys create [options]
+
+Create a site API key, optionally with a per-period credit limit. Returns the new token
+
+Options:
+  --name <value>             Key name, such as the client it belongs to
+  --usage-limit <n-or-none>  Credits this key may use per billing period; null means unlimited (pass
+                             "none" for null)
+  --idempotency-key <value>  Reuse the same value when retrying so the change happens once
+  -h, --help                 Show help
+
+Global Options:
+  -v, --version              Print the version
+  --json                     Print the result as JSON on stdout
+  --no-input                 Never prompt; fail instead when input is needed
+  --yes                      Run destructive commands without asking for confirmation
+  --dry-run                  Read the target and show what a change would do, without making it
+  --show-tokens              Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > keys get --help matches its snapshot 1`] = `
+"Usage: alttext keys get [options] <id>
+
+Get one API key's details, usage and limit. The token is masked; use reveal_api_key_token to see it.
+billable_credits is uncapped; billable_complete false means the figure may undercount.
+previous_period is the latest closure, which may be a revocation rather than last month. For
+historical billing use detail full, match credit_history period_start/period_end to the requested
+interval, and verify completeness
+
+Arguments:
+  id                The API key's ID
+
+Options:
+  --detail <value>  full adds usage history, domains and credit periods (default: concise) (choices:
+                    "concise", "full")
+  -h, --help        Show help
+
+Global Options:
+  -v, --version     Print the version
+  --json            Print the result as JSON on stdout
+  --no-input        Never prompt; fail instead when input is needed
+  --yes             Run destructive commands without asking for confirmation
+  --dry-run         Read the target and show what a change would do, without making it
+  --show-tokens     Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > keys history --help matches its snapshot 1`] = `
+"Usage: alttext keys history [options] <id>
+
+List the recorded changes to one API key, newest first, with who made each
+
+Arguments:
+  id               The API key's ID
+
+Options:
+  --after <value>  Cursor from a previous page's next_cursor
+  --limit <n>      Items per page (default: 25, max: 100)
+  -h, --help       Show help
+
+Global Options:
+  -v, --version    Print the version
+  --json           Print the result as JSON on stdout
+  --no-input       Never prompt; fail instead when input is needed
+  --yes            Run destructive commands without asking for confirmation
+  --dry-run        Read the target and show what a change would do, without making it
+  --show-tokens    Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > keys list --help matches its snapshot 1`] = `
+"Usage: alttext keys list [options]
+
+List the account's site API keys with usage and limits. Tokens are masked to their last four
+characters. billable_credits is uncapped; billable_complete false means the figure may undercount.
+previous_period is the latest closure, which may be a revocation rather than last month. For
+historical billing use detail full, match credit_history period_start/period_end to the requested
+interval, and verify completeness. status "all" includes revoked keys
+
+Options:
+  --after <value>   Cursor from a previous page's next_cursor
+  --limit <n>       Items per page (default: 25, max: 100)
+  --status <value>  Which keys to list (default: active) (choices: "active", "revoked", "all")
+  --q <value>       Match keys whose name contains this text
+  --all             Follow cursors and list every matching key
+  -h, --help        Show help
+
+Global Options:
+  -v, --version     Print the version
+  --json            Print the result as JSON on stdout
+  --no-input        Never prompt; fail instead when input is needed
+  --yes             Run destructive commands without asking for confirmation
+  --dry-run         Read the target and show what a change would do, without making it
+  --show-tokens     Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > keys reveal --help matches its snapshot 1`] = `
+"Usage: alttext keys reveal [options] <id>
+
+Show one API key's full token. The reveal is recorded in the key's history. Only use when the person
+asks for this key's token
+
+Arguments:
+  id             The API key's ID
+
+Options:
+  -h, --help     Show help
+
+Global Options:
+  -v, --version  Print the version
+  --json         Print the result as JSON on stdout
+  --no-input     Never prompt; fail instead when input is needed
+  --yes          Run destructive commands without asking for confirmation
+  --dry-run      Read the target and show what a change would do, without making it
+  --show-tokens  Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > keys revoke --help matches its snapshot 1`] = `
+"Usage: alttext keys revoke [options] <id>
+
+Revoke an API key. Its token stops working immediately; the key and its usage stay readable. First
+confirm the key by name and id with the person, and check get_api_key's integration field: an
+integration key stops working until it reconnects
+
+Arguments:
+  id             The API key's ID
+
+Options:
+  -h, --help     Show help
+
+Global Options:
+  -v, --version  Print the version
+  --json         Print the result as JSON on stdout
+  --no-input     Never prompt; fail instead when input is needed
+  --yes          Run destructive commands without asking for confirmation
+  --dry-run      Read the target and show what a change would do, without making it
+  --show-tokens  Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > keys rotate --help matches its snapshot 1`] = `
+"Usage: alttext keys rotate [options] <id>
+
+Replace an API key's token. The old token stops working immediately. Returns the new token. First
+confirm the key by name and id with the person, and check get_api_key's integration field: an
+integration key stops working until it reconnects
+
+Arguments:
+  id                         The API key's ID
+
+Options:
+  --idempotency-key <value>  Reuse the same value when retrying so the change happens once
+  -h, --help                 Show help
+
+Global Options:
+  -v, --version              Print the version
+  --json                     Print the result as JSON on stdout
+  --no-input                 Never prompt; fail instead when input is needed
+  --yes                      Run destructive commands without asking for confirmation
+  --dry-run                  Read the target and show what a change would do, without making it
+  --show-tokens              Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > keys update --help matches its snapshot 1`] = `
+"Usage: alttext keys update [options] <id>
+
+Rename an API key or change its per-period credit limit (null removes the limit)
+
+Arguments:
+  id                         The API key's ID
+
+Options:
+  --name <value>             Key name, such as the client it belongs to
+  --usage-limit <n-or-none>  Credits this key may use per billing period; null means unlimited (pass
+                             "none" for null)
+  -h, --help                 Show help
+
+Global Options:
+  -v, --version              Print the version
+  --json                     Print the result as JSON on stdout
+  --no-input                 Never prompt; fail instead when input is needed
+  --yes                      Run destructive commands without asking for confirmation
+  --dry-run                  Read the target and show what a change would do, without making it
+  --show-tokens              Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > login --help matches its snapshot 1`] = `
+"Usage: alttext login [options]
+
+Store an API key after checking it works. Reads the key from a hidden prompt, or from stdin when
+piped
+
+Options:
+  -h, --help     Show help
+
+Global Options:
+  -v, --version  Print the version
+  --json         Print the result as JSON on stdout
+  --no-input     Never prompt; fail instead when input is needed
+  --yes          Run destructive commands without asking for confirmation
+  --dry-run      Read the target and show what a change would do, without making it
+  --show-tokens  Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > logout --help matches its snapshot 1`] = `
+"Usage: alttext logout [options]
+
+Remove the stored API key from the OS keychain and the credentials file
+
+Options:
+  -h, --help     Show help
+
+Global Options:
+  -v, --version  Print the version
+  --json         Print the result as JSON on stdout
+  --no-input     Never prompt; fail instead when input is needed
+  --yes          Run destructive commands without asking for confirmation
+  --dry-run      Read the target and show what a change would do, without making it
+  --show-tokens  Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > pages --help matches its snapshot 1`] = `
+"Usage: alttext pages [options] [command]
+
+Find a web page's images and queue alt text for them
+
+Options:
+  -h, --help        Show help
+
+Global Options:
+  -v, --version     Print the version
+  --json            Print the result as JSON on stdout
+  --no-input        Never prompt; fail instead when input is needed
+  --yes             Run destructive commands without asking for confirmation
+  --dry-run         Read the target and show what a change would do, without making it
+  --show-tokens     Show full tokens in keys list and keys get
+
+Commands:
+  scrape [options]  Find images on a web page and queue alt-text generation jobs. Uses account
+                    credits. Images are processed asynchronously; inspect the image library for
+                    results.
+"
+`;
+
+exports[`help > pages scrape --help matches its snapshot 1`] = `
+"Usage: alttext pages scrape [options]
+
+Find images on a web page and queue alt-text generation jobs. Uses account credits. Images are
+processed asynchronously; inspect the image library for results.
+
+Options:
+  --url <value>                URL of the web page to scrape
+  --html <value>               Optional HTML override (if omitted, server fetches the page)
+  --include-existing           Include images that already have alt text
+  --no-include-existing        Set include_existing to false
+  --lang <value>               Comma-separated language codes (e.g. 'en', 'en,fr,es')
+  --keywords <value>           Keywords to incorporate (repeatable)
+  --negative-keywords <value>  Keywords to avoid (repeatable)
+  --gpt-prompt <value>         Custom prompt template. Use {{AltText}} as a placeholder for the
+                               generated alt text.
+  --max-chars <n>              Maximum character length for the alt text
+  -h, --help                   Show help
+
+Global Options:
+  -v, --version                Print the version
+  --json                       Print the result as JSON on stdout
+  --no-input                   Never prompt; fail instead when input is needed
+  --yes                        Run destructive commands without asking for confirmation
+  --dry-run                    Read the target and show what a change would do, without making it
+  --show-tokens                Show full tokens in keys list and keys get
+"
+`;
+
+exports[`help > whoami --help matches its snapshot 1`] = `
+"Usage: alttext whoami [options]
+
+Show the account, the key's kind, what it can do and where it came from
+
+Options:
+  -h, --help     Show help
+
+Global Options:
+  -v, --version  Print the version
+  --json         Print the result as JSON on stdout
+  --no-input     Never prompt; fail instead when input is needed
+  --yes          Run destructive commands without asking for confirmation
+  --dry-run      Read the target and show what a change would do, without making it
+  --show-tokens  Show full tokens in keys list and keys get
+"
+`;

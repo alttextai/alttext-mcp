@@ -66,6 +66,47 @@ Add the server to your MCP client configuration:
 | Cursor | MCP settings in the Cursor preferences |
 | Windsurf | MCP settings in the Windsurf preferences |
 
+## Command-line tool
+
+The same operations are available as the `alttext` command, which also manages an account's site API keys with a full-access key. See [packages/cli/README.md](packages/cli/README.md) for commands, flags and exit codes.
+
+Once `@alttext_ai/cli` is released on npm:
+
+```sh
+npm install -g @alttext_ai/cli
+alttext login
+alttext whoami
+```
+
+Until then, build it from a clone of this repo:
+
+```sh
+npm install
+npm run build
+npm link --workspace packages/cli
+```
+
+## Agent skill
+
+`skills/alttext` teaches Claude Code, Codex and other coding agents to drive the `alttext` CLI: checking `whoami` first, parsing `--json`, dry-running and asking before a rotate, revoke or delete, keeping tokens out of the conversation, and the reseller workflows for onboarding, billing and leaked keys. The skill contains no credentials, and it tells the agent to have you run `alttext login` yourself rather than paste a key into chat. It needs the CLI installed.
+
+With [`npx skills`](https://github.com/vercel-labs/skills), for any supported agent:
+
+```sh
+npx skills add alttextai/alttext-mcp --skill alttext
+```
+
+As a Claude Code plugin, from this repo's plugin marketplace:
+
+```sh
+claude plugin marketplace add alttextai/alttext-mcp
+claude plugin install alttext@alttext-ai
+```
+
+Or in one step inside a Claude Code session (2.1.275 or later): `/plugin install alttext --marketplace alttextai/alttext-mcp`.
+
+From a local clone, pass the clone's path instead: `npx skills add ./alttext-mcp --skill alttext`, or `claude plugin marketplace add ./alttext-mcp`.
+
 ## Tools
 
 ### Account Management
@@ -138,14 +179,18 @@ Once configured, just ask your AI assistant:
 
 ## Development
 
+The repo is an npm workspace: `packages/core` (private API client, schemas and formatters, bundled into each published package), `packages/mcp` (`@alttext_ai/alttext-mcp`) and `packages/cli` (`@alttext_ai/cli`, the `alttext` command).
+
 ```sh
 npm install
-npm run build
-npm test
-npm run lint
+npm run check
 ```
 
+The root `package.json` version is the only one to edit. `npm run version:stamp` copies it into every package and `server.json`, and CI fails when they drift. A `v*` tag matching that version publishes both packages.
+
 Tests use mocked `fetch` calls -- no API key or network access needed.
+
+`npm run skills:validate` checks each skill's frontmatter and links, and that every `alttext` command and flag a skill mentions exists in the built CLI. It runs as part of `npm run check`, after the build.
 
 Hosted deployments must rate-limit `POST /register` at a trusted edge using the verified client address. The Node service deliberately ignores forwarded client-address headers because accepting them without an authenticated proxy boundary would let callers spoof the rate-limit identity.
 
@@ -157,4 +202,4 @@ MIT
 
 ## Registry publishing
 
-`server.json` describes the stdio npm package. Its name matches `mcpName` in `package.json`; both versions must match the release being submitted. Publish and verify that exact npm version before running `mcp-publisher publish`. Registry acceptance and directory approval are separate from an npm release.
+`server.json` describes the stdio npm package. Its name matches `mcpName` in `packages/mcp/package.json`; both versions must match the release being submitted. Publish and verify that exact npm version before running `mcp-publisher publish`. Registry acceptance and directory approval are separate from an npm release.

@@ -1,49 +1,27 @@
 {
-  "name": "@alttext_ai/alttext-mcp",
-  "version": "1.0.5",
-  "description": "Generate alt text, translate descriptions, and manage your AltText.ai image library.",
+  "name": "alttext-toolkit",
+  "version": "1.0.6",
+  "private": true,
   "license": "MIT",
-  "author": "AltText.ai (https://alttext.ai)",
-  "homepage": "https://alttext.ai",
-  "keywords": [
-    "mcp",
-    "model-context-protocol",
-    "alt-text",
-    "accessibility",
-    "a11y",
-    "image",
-    "ai",
-    "alttext"
-  ],
-  "bugs": "https://github.com/alttextai/alttext-mcp/issues",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/alttextai/alttext-mcp.git"
-  },
   "type": "module",
-  "bin": {
-    "alttext-mcp": "dist/index.js"
-  },
-  "files": [
-    "dist"
+  "workspaces": [
+    "packages/core",
+    "packages/mcp",
+    "packages/cli"
   ],
   "scripts": {
-    "build": "tsc && shx chmod +x dist/*.js",
-    "prepare": "npm run build",
-    "lint": "eslint src/ test/",
-    "lint:fix": "eslint src/ test/ --fix",
-    "format": "prettier --write 'src/**/*.ts' 'test/**/*.ts'",
-    "format:check": "prettier --check 'src/**/*.ts' 'test/**/*.ts'",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "eslint packages/",
+    "lint:fix": "eslint packages/ --fix",
+    "format": "prettier --write 'packages/*/{src,test}/**/*.ts' 'packages/*/tsup.config.ts' 'scripts/*.mjs'",
+    "format:check": "prettier --check 'packages/*/{src,test}/**/*.ts' 'packages/*/tsup.config.ts' 'scripts/*.mjs'",
+    "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
     "test:watch": "vitest",
-    "check": "npm run lint && npm run format:check && npm run build && npm test",
-    "watch": "tsc --watch"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.25.2",
-    "oidc-provider": "9.12.2",
-    "redis": "6.2.1",
-    "zod": "^4.3.6"
+    "version:stamp": "node scripts/stamp-version.mjs",
+    "version:check": "node scripts/stamp-version.mjs --check",
+    "check": "npm run version:check && npm run lint && npm run format:check && npm run typecheck && npm run build && npm run skills:validate && npm test",
+    "skills:validate": "node scripts/validate-skills.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.0.0",
@@ -53,12 +31,12 @@
     "eslint-config-prettier": "^10.0.0",
     "prettier": "^3.4.0",
     "shx": "^0.4.0",
+    "tsup": "^8.5.1",
     "typescript": "^5.8.2",
     "typescript-eslint": "^8.0.0",
     "vitest": "^4.0.18"
   },
   "engines": {
     "node": ">=22"
-  },
-  "mcpName": "io.github.alttextai/alttext-mcp"
+  }
 }
