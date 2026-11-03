@@ -241,6 +241,12 @@ export function createHttp(
       });
       grant.addResourceScope(config.resource, connection.scopes.join(" "));
       grant.addOIDCScope([...(state.oidcScopes ?? []), ...connection.scopes].join(" "));
+      // a scope left unrecorded makes oidc-provider re-prompt for consent forever
+      const declined = state.scopes.filter((s) => !connection.scopes.includes(s)).join(" ");
+      if (declined) {
+        grant.rejectResourceScope(config.resource, declined);
+        grant.rejectOIDCScope(declined);
+      }
       const grantId = await grant.save();
       await oauth.interactionFinished(
         req,
