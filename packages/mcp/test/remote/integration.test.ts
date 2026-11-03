@@ -18,6 +18,7 @@ interface TokenReply {
   access_token: string;
   id_token?: string;
   refresh_token: string;
+  scope?: string;
 }
 let redisProcess: ChildProcess;
 let redis: RedisClientType;
@@ -749,6 +750,16 @@ describe("HTTP OAuth and MCP", () => {
       },
     );
     expect((await toolCall(token.access_token)).status).toBe(200);
+  });
+  it("finishes consent when the user declines a requested mcp:keys instead of re-prompting", async () => {
+    const { token } = await authorize(
+      "keys-declined",
+      ["mcp:read", "mcp:write"],
+      ["openid", "mcp:read", "mcp:write", "mcp:keys"],
+    );
+    expect(token.scope?.split(" ")).not.toContain("mcp:keys");
+    expect((await toolCall(token.access_token)).status).toBe(200);
+    expect((await toolCall(token.access_token, "list_api_keys")).status).toBe(403);
   });
   it("lists key tools for a connection without mcp:keys and refuses their calls naming it", async () => {
     const { token } = await authorize("keys-missing");
