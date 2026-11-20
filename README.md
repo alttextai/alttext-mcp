@@ -200,6 +200,12 @@ The production container and required settings are documented in [docs/deploymen
 
 MIT
 
+## npm publishing
+
+A matching version tag runs `.github/workflows/publish.yml`. Configure the npm trusted publisher for each package with owner `alttextai`, repository `alttext-mcp`, and workflow `publish.yml`. Allow that publisher to publish directly. When creating a package for the first time, use an authorized release credential with write access to the `@alttext_ai` scope and permission to publish from CI.
+
+The workflow checks each public tarball against the one it built before creating the GitHub release. If one package published before the other failed, rerun the same tag after fixing its access. The workflow skips an existing version only when its package integrity matches.
+
 ## Registry publishing
 
 `server.json` describes the stdio npm package. Its name matches `mcpName` in `packages/mcp/package.json`; both versions must match the release being submitted. Publish and verify that exact npm version before running `mcp-publisher publish`. Registry acceptance and directory approval are separate from an npm release.
