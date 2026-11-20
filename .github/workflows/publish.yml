@@ -35,9 +35,38 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - run: npm test
-      - run: npm publish --provenance --access public -w packages/mcp -w packages/cli
+      - name: Install the OIDC-capable npm CLI
+        run: npm install --global npm@11.21.3
+      - name: Publish and verify the MCP server and CLI
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          for workspace in packages/mcp packages/cli; do
+            npm run prepack --workspace "$workspace"
+            pack=$(npm pack --json --ignore-scripts --workspace "$workspace" --pack-destination "$RUNNER_TEMP" |
+              jq -ce 'if length == 1 then first(.[]) else error("expected one packed package") end')
+            package=$(jq -er '.name' <<< "$pack")
+            tarball="$RUNNER_TEMP/$(jq -er '.filename' <<< "$pack")"
+            expected=$(jq -er '.integrity' <<< "$pack")
+            existing=$(npm view "${package}@${version}" dist.integrity --prefer-online --fetch-retries=0 --fetch-timeout=10000) || existing=""
+            if [ -z "$existing" ]; then
+              npm publish "$tarball" --provenance --access public
+            elif [ "$existing" != "$expected" ]; then
+              echo "::error::${package}@${version} exists with different package contents."
+              exit 1
+            fi
+            for attempt in 1 2 3 4 5; do
+              actual=$(npm view "${package}@${version}" dist.integrity --prefer-online --fetch-retries=0 --fetch-timeout=10000) || actual=""
+              if [ "$actual" = "$expected" ]; then break; fi
+              if [ "$attempt" -eq 5 ]; then
+                echo "::error::Registry did not return the expected package integrity for ${package}@${version}."
+                exit 1
+              fi
+              sleep 5
+            done
+          done
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
